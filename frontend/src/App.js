@@ -32,6 +32,7 @@ function App() {
       }
       if (apiKey) params.apiKey = apiKey;
 
+      console.log('📡 fetchFires appelé avec params:', params);
       const data = await getFires(params);
       setFireData(data);
     } catch (err) {
@@ -50,15 +51,18 @@ function App() {
         if (!response.ok) {
           console.warn('⚠️ Backend non disponible (code:', response.status, ')');
         } else {
-          console.log('✅ Backend accessible');
+          const data = await response.json();
+          console.log('✅ Backend accessible:', data);
         }
       } catch (e) {
         console.warn('⚠️ Backend injoignable – assurez-vous que le serveur tourne sur le port 5000');
+        console.warn('   Pour démarrer le backend : cd backend && npm start');
       }
     };
     checkBackend();
   }, []);
 
+  // Initialisation de la carte
   useEffect(() => {
     if (!map.current) {
       map.current = new maplibregl.Map({
@@ -78,6 +82,7 @@ function App() {
     };
   }, []);
 
+  // Ajout des données sur la carte
   useEffect(() => {
     if (!map.current || !fireData) return;
 
@@ -121,6 +126,7 @@ function App() {
     }
   }, [fireData]);
 
+  // Appel initial et lors des changements de paramètres
   useEffect(() => {
     fetchFires();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -142,7 +148,7 @@ function App() {
         onFetch={fetchFires}
       />
       {loading && <div className="loading-overlay">Chargement des feux...</div>}
-      {error && <div className="error-message">Erreur : {error}</div>}
+      {error && <div className="error-message">❌ Erreur : {error}</div>}
       <div ref={mapContainer} className="map-container" />
     </div>
   );
