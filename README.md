@@ -40,7 +40,7 @@ Application web complète pour visualiser :
 1. Clonez le dépôt.
    ```bash
    git clone https://github.com/sebastienbats/FireMaps2.git
-   cd FireMaps
+   cd FireMaps2
    ```
 2. Installation et exécution
    ```bash
