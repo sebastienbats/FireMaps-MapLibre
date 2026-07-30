@@ -1,6 +1,7 @@
 import axios from 'axios';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || '/api'; // utilise le proxy
+// Utilise le proxy défini dans package.json
+const API_BASE_URL = process.env.REACT_APP_API_URL || '/api';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -54,6 +55,7 @@ export const getFires = async ({ source, days, startDate, endDate, apiKey }) => 
     }
     if (apiKey) params.apiKey = apiKey;
 
+    console.log('📡 Envoi de la requête avec params:', params);
     const response = await api.get('/fires', { params });
     return response.data;
   } catch (error) {
