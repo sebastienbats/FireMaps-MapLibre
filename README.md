@@ -1,4 +1,4 @@
-# 🔥 Feux & Vents & Météo & SDIS – France
+# 🔥 FireMaps-MapLibre
 
 Application web complète pour visualiser :
 - les feux actifs (NASA FIRMS),
@@ -39,8 +39,8 @@ Application web complète pour visualiser :
 
 1. Clonez le dépôt.
    ```bash
-   git clone https://github.com/sebastienbats/FireMaps2.git
-   cd FireMaps2
+   git clone https://github.com/sebastienbats/FireMaps-MapLibre.git
+   cd FireMaps-MapLibre
    ```
 2. Installation et exécution
    ```bash
@@ -56,7 +56,7 @@ Application web complète pour visualiser :
 
 ## 📦 Structure des fichiers
 ```text
-fireMaps2/
+FireMaps-MapLibre/
 ├── backend/
 │   ├── package.json
 │   ├── server.js
