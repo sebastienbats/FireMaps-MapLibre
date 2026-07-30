@@ -18,12 +18,14 @@ const Controls = ({
   const [sources, setSources] = useState([]);
   const [loadingSources, setLoadingSources] = useState(false);
 
+  // Chargement des sources au montage (une seule fois)
   useEffect(() => {
     const loadSources = async () => {
       setLoadingSources(true);
       try {
         const srcList = await getSources();
         setSources(srcList);
+        // Si aucune source sélectionnée, on choisit la première
         if (srcList.length > 0 && !selectedSource) {
           onSourceChange(srcList[0]);
         }
@@ -34,7 +36,8 @@ const Controls = ({
       }
     };
     loadSources();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // ← volontairement vide, car on veut charger les sources une seule fois
 
   const handleSubmit = (e) => {
     e.preventDefault();
