@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
 import maplibregl from 'maplibre-gl';
-import { omProtocol } from '@openmeteo/weather-map-layer';
 import './Map.css';
 
 // Configuration des couches météo Open-Meteo
@@ -188,14 +187,48 @@ const Map = ({
   const windIntervalRef = useRef(null);
   const sdisSourceId = 'sdis-source';
   const sdisLayerId = 'sdis-layer';
+  const [omProtocolReady, setOmProtocolReady] = useState(false);
+
+  // === VÉRIFICATION ET INITIALISATION DU PROTOCOLE OM ===
+  useEffect(() => {
+    // Vérifier que l'objet global OMWeatherMapLayer est disponible
+    if (typeof window !== 'undefined' && window.OMWeatherMapLayer) {
+      console.log('🌦️ OMWeatherMapLayer chargé via UNPKG');
+      
+      // Enregistrer le protocole OM
+      if (maplibregl && typeof maplibregl.addProtocol === 'function') {
+        maplibregl.addProtocol('om', window.OMWeatherMapLayer.omProtocol);
+        setOmProtocolReady(true);
+        console.log('✅ Protocole OM enregistré');
+      } else {
+        console.warn('⚠️ maplibregl.addProtocol non disponible');
+      }
+    } else {
+      console.warn('⚠️ OMWeatherMapLayer non chargé, vérifiez le script UNPKG dans index.html');
+      
+      // Tentative de chargement alternatif si le script n'est pas chargé
+      const script = document.createElement('script');
+      script.src = 'https://unpkg.com/@openmeteo/weather-map-layer@0.0.20/dist/index.js';
+      script.onload = () => {
+        console.log('✅ OMWeatherMapLayer chargé dynamiquement');
+        if (window.OMWeatherMapLayer && maplibregl) {
+          maplibregl.addProtocol('om', window.OMWeatherMapLayer.omProtocol);
+          setOmProtocolReady(true);
+          console.log('✅ Protocole OM enregistré (chargement dynamique)');
+        }
+      };
+      script.onerror = () => {
+        console.error('❌ Échec du chargement dynamique de OMWeatherMapLayer');
+      };
+      document.head.appendChild(script);
+    }
+  }, []);
 
   // === INITIALISATION DE LA CARTE ===
   useEffect(() => {
     if (!mapContainer.current || mapRef.current) return;
 
     console.log('🗺️ Initialisation de la carte MapLibre...');
-
-    maplibregl.addProtocol('om', omProtocol);
 
     mapRef.current = new maplibregl.Map({
       container: mapContainer.current,
@@ -338,17 +371,19 @@ const Map = ({
         mapRef.current.getCanvas().style.cursor = '';
       });
 
-      // === MÉTÉO ===
-      WEATHER_LAYERS.forEach(weatherLayer => {
-        const sourceId = `weather-${weatherLayer.value}`;
-        mapRef.current.addSource(sourceId, {
-          type: 'raster',
-          tiles: [`https://api.open-meteo.com/v1/map/{z}/{x}/{y}/${weatherLayer.layer}.png`],
-          tileSize: 256,
-          maxzoom: 8,
-          minzoom: 3,
-        });
-      });
+      // === MÉTÉO AVEC OM PROTOCOL ===
+      // Ajouter les sources OM si le protocole est prêt
+      if (omProtocolReady) {
+        addWeatherSources();
+      } else {
+        console.log('⏳ Attente du protocole OM pour les couches météo...');
+        // Réessayer après un court délai
+        setTimeout(() => {
+          if (omProtocolReady) {
+            addWeatherSources();
+          }
+        }, 1000);
+      }
 
       // === VENT ===
       mapRef.current.addSource('wind-source', {
@@ -415,6 +450,41 @@ const Map = ({
     };
   }, []);
 
+  // === AJOUT DES SOURCES MÉTÉO OM ===
+  const addWeatherSources = () => {
+    if (!mapRef.current || !omProtocolReady) return;
+
+    console.log('🌦️ Ajout des sources météo OM...');
+
+    WEATHER_LAYERS.forEach(weatherLayer => {
+      const sourceId = `weather-om-${weatherLayer.value}`;
+      const layerId = `weather-layer-om-${weatherLayer.value}`;
+      
+      try {
+        const omUrl = `https://map-tiles.open-meteo.com/data_spatial/dwd_icon/latest.json?variable=${weatherLayer.layer}`;
+        
+        mapRef.current.addSource(sourceId, {
+          url: `om://${omUrl}`,
+          type: 'raster',
+          maxzoom: 12,
+        });
+
+        mapRef.current.addLayer({
+          id: layerId,
+          type: 'raster',
+          source: sourceId,
+          paint: {
+            'raster-opacity': 0.6,
+          },
+        });
+
+        console.log(`✅ Source OM ajoutée: ${weatherLayer.layer}`);
+      } catch (error) {
+        console.warn(`⚠️ Erreur lors de l'ajout de la source OM ${weatherLayer.layer}:`, error);
+      }
+    });
+  };
+
   // === MISE À JOUR DES FEUX ===
   const updateFireMarkers = (fires) => {
     if (!mapRef.current || !mapLoaded) return;
@@ -476,57 +546,67 @@ const Map = ({
       const source = mapRef.current.getSource(sdisSourceId);
       if (source) source.setData({ type: 'FeatureCollection', features: [] });
     }
-  }, [sdisLayers, mapLoaded, showSdis]);
+  }, [sdisLayers, mapLoaded]);
 
-  // === GESTION DES COUCHES MÉTÉO ===
+  // === GESTION DES COUCHES MÉTÉO OM ===
   useEffect(() => {
-    if (!mapRef.current || !mapLoaded) return;
+    if (!mapRef.current || !mapLoaded || !omProtocolReady) return;
 
     const activeLayerValues = activeWeatherLayers.map(l => l.value);
 
+    // Supprimer les couches inactives
     Object.keys(weatherSourcesRef.current).forEach(key => {
       if (!activeLayerValues.includes(key)) {
         try {
-          if (mapRef.current.getLayer(`weather-layer-${key}`)) {
-            mapRef.current.removeLayer(`weather-layer-${key}`);
+          if (mapRef.current.getLayer(`weather-layer-om-${key}`)) {
+            mapRef.current.removeLayer(`weather-layer-om-${key}`);
+          }
+          if (mapRef.current.getSource(`weather-om-${key}`)) {
+            mapRef.current.removeSource(`weather-om-${key}`);
           }
         } catch (e) { /* ignore */ }
         delete weatherSourcesRef.current[key];
       }
     });
 
+    // Ajouter les couches actives
     activeWeatherLayers.forEach(layerDef => {
       const fullDef = WEATHER_LAYERS.find(w => w.value === layerDef.value);
       if (!fullDef) return;
 
-      const sourceId = `weather-${fullDef.value}`;
-      const layerId = `weather-layer-${fullDef.value}`;
+      const sourceId = `weather-om-${fullDef.value}`;
+      const layerId = `weather-layer-om-${fullDef.value}`;
       const opacity = layerDef.opacity || weatherOpacity;
 
-      if (!mapRef.current.getSource(sourceId)) {
-        mapRef.current.addSource(sourceId, {
-          type: 'raster',
-          tiles: [`https://api.open-meteo.com/v1/map/{z}/{x}/{y}/${fullDef.layer}.png`],
-          tileSize: 256,
-          maxzoom: 8,
-          minzoom: 3,
-        });
-      }
+      try {
+        if (!mapRef.current.getSource(sourceId)) {
+          const omUrl = `https://map-tiles.open-meteo.com/data_spatial/dwd_icon/latest.json?variable=${fullDef.layer}`;
+          mapRef.current.addSource(sourceId, {
+            url: `om://${omUrl}`,
+            type: 'raster',
+            maxzoom: 12,
+          });
+        }
 
-      if (!mapRef.current.getLayer(layerId)) {
-        mapRef.current.addLayer({
-          id: layerId,
-          type: 'raster',
-          source: sourceId,
-          paint: { 'raster-opacity': opacity },
-        });
-      } else {
-        mapRef.current.setPaintProperty(layerId, 'raster-opacity', opacity);
-      }
+        if (!mapRef.current.getLayer(layerId)) {
+          mapRef.current.addLayer({
+            id: layerId,
+            type: 'raster',
+            source: sourceId,
+            paint: {
+              'raster-opacity': opacity,
+            },
+          });
+        } else {
+          mapRef.current.setPaintProperty(layerId, 'raster-opacity', opacity);
+        }
 
-      weatherSourcesRef.current[fullDef.value] = true;
+        weatherSourcesRef.current[fullDef.value] = true;
+      } catch (error) {
+        console.warn(`⚠️ Erreur avec la couche OM ${fullDef.value}:`, error);
+      }
     });
-  }, [activeWeatherLayers, weatherOpacity, mapLoaded]);
+  }, [activeWeatherLayers, weatherOpacity, mapLoaded, omProtocolReady]);
 
   // === VENT ===
   const updateWindLayer = (windData) => {
