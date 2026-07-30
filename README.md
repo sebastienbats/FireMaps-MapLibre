@@ -48,7 +48,7 @@ Application web complète pour visualiser :
    cd backend && npm install && npm start
    # ou en développement : npm run dev
    #Frontend
-   cd frontend && npm install @openmeteo/weather-map-layer && npm install && npm start
+   cd frontend && npm install && npm start
    #Le frontend sera accessible sur http://localhost:3000 et le backend sur http://localhost:5000.
    ```  
 3. Obtenez une clé API FIRMS gratuite sur [https://firms.modaps.eosdis.nasa.gov/mapkey/](https://firms.modaps.eosdis.nasa.gov/api/map_key).
