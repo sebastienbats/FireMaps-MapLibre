@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+const API_BASE_URL = process.env.REACT_APP_API_URL || '/api'; // utilise le proxy
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -10,15 +10,24 @@ const api = axios.create({
   },
 });
 
+// Intercepteur pour logger les requêtes
+api.interceptors.request.use(
+  (config) => {
+    console.log(`📡 Requête : ${config.method.toUpperCase()} ${config.baseURL}${config.url}`, config.params || config.data);
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response) {
-      console.error('Erreur API:', error.response.status, error.response.data);
+      console.error('❌ Erreur API:', error.response.status, error.response.data);
     } else if (error.request) {
-      console.error('Pas de réponse du serveur:', error.request);
+      console.error('❌ Pas de réponse du serveur:', error.request);
     } else {
-      console.error('Erreur de configuration:', error.message);
+      console.error('❌ Erreur de configuration:', error.message);
     }
     return Promise.reject(error);
   }
