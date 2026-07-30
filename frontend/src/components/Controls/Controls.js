@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { getSources } from '../api';
+import { getSources } from '../../api';
+import './Controls.css';
 
 const Controls = ({
   selectedSource,
@@ -17,14 +18,12 @@ const Controls = ({
   const [sources, setSources] = useState([]);
   const [loadingSources, setLoadingSources] = useState(false);
 
-  // Chargement des sources disponibles au montage
   useEffect(() => {
     const loadSources = async () => {
       setLoadingSources(true);
       try {
         const srcList = await getSources();
         setSources(srcList);
-        // Si aucune source n'est sélectionnée, on sélectionne la première
         if (srcList.length > 0 && !selectedSource) {
           onSourceChange(srcList[0]);
         }
@@ -35,11 +34,11 @@ const Controls = ({
       }
     };
     loadSources();
-  }, []); // exécuté une seule fois
+  }, []);
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    onFetch(); // déclenche la récupération des données
+    onFetch();
   };
 
   return (
