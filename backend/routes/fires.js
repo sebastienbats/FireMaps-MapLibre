@@ -3,7 +3,7 @@ const router = express.Router();
 const { query } = require('express-validator');
 const { getFires, getSources } = require('../controllers/fireController');
 
-// Route pour lister les sources
+// Route pour lister les sources disponibles
 router.get('/sources', getSources);
 
 // Route principale avec validation des paramètres
@@ -33,4 +33,4 @@ router.get('/',
   getFires
 );
 
-module.exports = router;
+module.exports = router;  // ← crucial : exporter le router
