@@ -444,7 +444,7 @@ function App() {
           SDIS : <a href="https://data.gouv.fr/" target="_blank" rel="noopener noreferrer">data.gouv.fr</a>
         </p>
         <p style={{ fontSize: '0.7rem', opacity: 0.6, marginTop: '2px' }}>
-          Version 2.0.0 • MapLibre GL JS • {new Date().getFullYear()}
+          Version 2.0.0 • MapLibre GL JS • Open-Meteo OM • {new Date().getFullYear()}
         </p>
       </footer>
     </div>
