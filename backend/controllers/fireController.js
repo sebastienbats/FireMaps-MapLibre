@@ -1,6 +1,6 @@
 const fetch = require('node-fetch');
-const fs = require('fs');
-const path = require('path');
+const { parse } = require('csv-parse/sync');
+const { validationResult } = require('express-validator');
 
 // --- Configuration des sources FIRMS ---
 const SOURCES = {
@@ -18,77 +18,58 @@ const SOURCES = {
   }
 };
 
-// --- Correction 1 : Fonction de parsing CSV robuste (version simple) ---
-// Pour une version production, utilisez la bibliothèque 'csv-parse'
-function parseCSVToJSON(csvText) {
-  const lines = csvText.split('\n').filter(line => line.trim() !== '');
-  if (lines.length < 2) return [];
-  const headers = lines[0].split(',').map(h => h.trim());
-  const result = [];
-  for (let i = 1; i < lines.length; i++) {
-    const values = lines[i].split(',').map(v => v.trim());
-    if (values.length !== headers.length) continue; // ligne mal formée
-    const obj = {};
-    headers.forEach((h, idx) => {
-      obj[h] = values[idx] || '';
-    });
-    result.push(obj);
-  }
-  return result;
-}
-
-// --- Correction 2 : Fonction getSources (manquante) ---
+// --- Endpoint pour lister les sources ---
 exports.getSources = (req, res) => {
   res.json({ sources: Object.keys(SOURCES) });
 };
 
-// --- Endpoint principal : récupération des feux ---
+// --- Endpoint principal avec validation et parsing CSV robuste ---
 exports.getFires = async (req, res) => {
+  // Vérification des erreurs de validation (middleware à brancher dans la route)
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
   try {
     const { source = 'VIIRS_SNPP_NRT', days = '1', startDate, endDate, apiKey } = req.query;
 
-    // Validation simple de la source
+    // Validation manuelle supplémentaire (express-validator est déjà utilisé)
     if (!SOURCES[source]) {
       return res.status(400).json({ error: 'Source invalide' });
     }
 
-    // Construction de l'URL FIRMS
+    // Construction de l'URL FIRMS avec gestion robuste des dates
     let url;
     if (startDate && endDate) {
-      // Format attendu : YYYY-MM-DD
-      // Correction 3 : gestion des dates avec fuseau horaire explicite (UTC+2 pour Paris)
       const start = new Date(startDate + 'T00:00:00+02:00');
       const end = new Date(endDate + 'T23:59:59+02:00');
       if (isNaN(start) || isNaN(end)) {
         return res.status(400).json({ error: 'Dates invalides' });
       }
-      // Conversion en format FIRMS : YYYY-MM-DD
-      const startStr = start.toISOString().slice(0,10);
-      const endStr = end.toISOString().slice(0,10);
+      const startStr = start.toISOString().slice(0, 10);
+      const endStr = end.toISOString().slice(0, 10);
       url = `${SOURCES[source].url}${startStr}_${endStr}.${SOURCES[source].format}`;
     } else {
-      // Par défaut : dernier N jours
       const daysInt = parseInt(days, 10);
       if (isNaN(daysInt) || daysInt < 1 || daysInt > 5) {
         return res.status(400).json({ error: 'Le paramètre days doit être entre 1 et 5' });
       }
       const today = new Date();
-      const endDateStr = today.toISOString().slice(0,10);
+      const endDateStr = today.toISOString().slice(0, 10);
       const startDateObj = new Date(today);
       startDateObj.setDate(today.getDate() - daysInt);
-      const startDateStr = startDateObj.toISOString().slice(0,10);
+      const startDateStr = startDateObj.toISOString().slice(0, 10);
       url = `${SOURCES[source].url}${startDateStr}_${endDateStr}.${SOURCES[source].format}`;
     }
 
-    // Ajout de la clé API en paramètre GET (à améliorer en production)
+    // Ajout de la clé API (à améliorer : utiliser un header)
     url += `?apiKey=${apiKey || process.env.FIRMS_API_KEY || ''}`;
-
     console.log(`🌐 Requête FIRMS : ${url}`);
 
-    // Correction 4 : gestion d'erreur complète avec try/catch et timeout
+    // Requête avec timeout
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30000); // 30s timeout
-
+    const timeout = setTimeout(() => controller.abort(), 30000);
     const response = await fetch(url, { signal: controller.signal });
     clearTimeout(timeout);
 
@@ -100,20 +81,32 @@ exports.getFires = async (req, res) => {
       return res.status(response.status).json({ error: errorMsg });
     }
 
-    // Le contenu est au format CSV
     const csvText = await response.text();
     if (!csvText || csvText.trim().length === 0) {
       return res.status(404).json({ error: 'Données vides' });
     }
 
-    // Parsing du CSV
-    const fireData = parseCSVToJSON(csvText);
-    if (fireData.length === 0) {
+    // --- Parsing CSV avec csv-parse (robuste) ---
+    let records;
+    try {
+      records = parse(csvText, {
+        columns: true,          // utilise la première ligne comme en-têtes
+        skip_empty_lines: true,
+        trim: true,
+        relax_quotes: true,     // tolère les guillemets mal formés
+        relax_column_count: true // ignore les lignes avec un mauvais nombre de colonnes
+      });
+    } catch (parseError) {
+      console.error('Erreur de parsing CSV:', parseError);
+      return res.status(500).json({ error: 'Erreur lors du parsing des données' });
+    }
+
+    if (records.length === 0) {
       return res.status(404).json({ error: 'Aucun feu trouvé' });
     }
 
-    // Transformation en GeoJSON (format attendu par le frontend)
-    const features = fireData.map(row => {
+    // Transformation en GeoJSON
+    const features = records.map(row => {
       const lat = parseFloat(row.latitude);
       const lon = parseFloat(row.longitude);
       if (isNaN(lat) || isNaN(lon)) return null;
@@ -144,7 +137,6 @@ exports.getFires = async (req, res) => {
 
     res.json(geojson);
   } catch (error) {
-    // Correction 4 : catch global pour toutes les erreurs (réseau, timeout, etc.)
     console.error('❌ Erreur dans getFires:', error);
     if (error.name === 'AbortError') {
       res.status(504).json({ error: 'Délai d’attente dépassé' });
