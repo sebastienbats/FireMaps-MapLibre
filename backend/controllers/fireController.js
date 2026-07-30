@@ -2,7 +2,6 @@ const fetch = require('node-fetch');
 const { parse } = require('csv-parse/sync');
 const { validationResult } = require('express-validator');
 
-// --- Configuration des sources FIRMS ---
 const SOURCES = {
   VIIRS_SNPP_NRT: {
     url: 'https://firms.modaps.eosdis.nasa.gov/data/active_fire/suomi-npp-viirs-c2/shapes/zips/SVNP_',
@@ -18,14 +17,11 @@ const SOURCES = {
   }
 };
 
-// --- Endpoint pour lister les sources ---
 exports.getSources = (req, res) => {
   res.json({ sources: Object.keys(SOURCES) });
 };
 
-// --- Endpoint principal avec validation et parsing CSV robuste ---
 exports.getFires = async (req, res) => {
-  // Vérification des erreurs de validation (middleware à brancher dans la route)
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(400).json({ errors: errors.array() });
@@ -34,12 +30,10 @@ exports.getFires = async (req, res) => {
   try {
     const { source = 'VIIRS_SNPP_NRT', days = '1', startDate, endDate, apiKey } = req.query;
 
-    // Validation manuelle supplémentaire (express-validator est déjà utilisé)
     if (!SOURCES[source]) {
       return res.status(400).json({ error: 'Source invalide' });
     }
 
-    // Construction de l'URL FIRMS avec gestion robuste des dates
     let url;
     if (startDate && endDate) {
       const start = new Date(startDate + 'T00:00:00+02:00');
@@ -63,11 +57,9 @@ exports.getFires = async (req, res) => {
       url = `${SOURCES[source].url}${startDateStr}_${endDateStr}.${SOURCES[source].format}`;
     }
 
-    // Ajout de la clé API (à améliorer : utiliser un header)
     url += `?apiKey=${apiKey || process.env.FIRMS_API_KEY || ''}`;
     console.log(`🌐 Requête FIRMS : ${url}`);
 
-    // Requête avec timeout
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 30000);
     const response = await fetch(url, { signal: controller.signal });
@@ -86,15 +78,14 @@ exports.getFires = async (req, res) => {
       return res.status(404).json({ error: 'Données vides' });
     }
 
-    // --- Parsing CSV avec csv-parse (robuste) ---
     let records;
     try {
       records = parse(csvText, {
-        columns: true,          // utilise la première ligne comme en-têtes
+        columns: true,
         skip_empty_lines: true,
         trim: true,
-        relax_quotes: true,     // tolère les guillemets mal formés
-        relax_column_count: true // ignore les lignes avec un mauvais nombre de colonnes
+        relax_quotes: true,
+        relax_column_count: true
       });
     } catch (parseError) {
       console.error('Erreur de parsing CSV:', parseError);
@@ -105,7 +96,6 @@ exports.getFires = async (req, res) => {
       return res.status(404).json({ error: 'Aucun feu trouvé' });
     }
 
-    // Transformation en GeoJSON
     const features = records.map(row => {
       const lat = parseFloat(row.latitude);
       const lon = parseFloat(row.longitude);
