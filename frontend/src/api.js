@@ -10,7 +10,6 @@ const api = axios.create({
   },
 });
 
-// Intercepteur pour gérer les erreurs globalement
 api.interceptors.response.use(
   (response) => response,
   (error) => {
@@ -25,7 +24,6 @@ api.interceptors.response.use(
   }
 );
 
-// Récupération des sources disponibles
 export const getSources = async () => {
   try {
     const response = await api.get('/fires/sources');
@@ -36,10 +34,9 @@ export const getSources = async () => {
   }
 };
 
-// Récupération des feux avec paramètres
 export const getFires = async ({ source, days, startDate, endDate, apiKey }) => {
   try {
-    const params = { source }; // source est une chaîne, pas un nombre
+    const params = { source };
     if (startDate && endDate) {
       params.startDate = startDate;
       params.endDate = endDate;
