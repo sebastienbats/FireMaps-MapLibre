@@ -20,24 +20,55 @@ const SDIS_COLORS = {
   default: '#e67e22',
 };
 
+// Couleurs pour les points selon FRP
+const FRP_POINT_COLORS = {
+  low: '#f39c12',    // FRP 50-100
+  high: '#e74c3c',   // FRP > 100
+};
+
+// Tailles des points selon FRP
+const FRP_POINT_SIZES = {
+  low: 10,   // FRP 50-100
+  high: 14,  // FRP > 100
+};
+
 // Créer le GeoJSON des feux
 const createFireGeoJSON = (fires) => {
   return {
     type: 'FeatureCollection',
-    features: fires.map(fire => ({
-      type: 'Feature',
-      geometry: {
-        type: 'Point',
-        coordinates: [fire.longitude, fire.latitude]
-      },
-      properties: {
-        confidence: fire.confidence || 'N/A',
-        frp: fire.frp || 0,
-        acq_date: fire.acq_date || 'N/A',
-        acq_time: fire.acq_time || 'N/A',
-        type: fire.type || ''
-      }
-    }))
+    features: fires.map(fire => {
+      const frp = fire.frp || 0;
+      
+      // Ne garder que les feux avec FRP > 50 pour les points
+      // (les autres seront affichés dans la heatmap)
+      const isHighIntensity = frp > 50;
+      
+      return {
+        type: 'Feature',
+        geometry: {
+          type: 'Point',
+          coordinates: [fire.longitude, fire.latitude]
+        },
+        properties: {
+          confidence: fire.confidence || 'N/A',
+          frp: frp,
+          acq_date: fire.acq_date || 'N/A',
+          acq_time: fire.acq_time || 'N/A',
+          type: fire.type || '',
+          bright_ti4: fire.bright_ti4 || 0,
+          bright_ti5: fire.bright_ti5 || 0,
+          scan: fire.scan || 0,
+          track: fire.track || 0,
+          satellite: fire.satellite || '',
+          // Propriétés pour l'affichage
+          isHighIntensity: isHighIntensity,
+          intensity: frp > 100 ? 'Extrême' : frp > 50 ? 'Élevée' : 'Moyenne',
+          // Taille et couleur selon FRP
+          size: frp > 100 ? FRP_POINT_SIZES.high : frp > 50 ? FRP_POINT_SIZES.low : 0,
+          color: frp > 100 ? FRP_POINT_COLORS.high : frp > 50 ? FRP_POINT_COLORS.low : 'transparent'
+        }
+      };
+    })
   };
 };
 
@@ -167,6 +198,32 @@ const createSdisGeoJSON = (sdisData) => {
   };
 };
 
+// === FONCTION POUR CRÉER L'ICÔNE FEU AVEC CANVAS (pour les points high intensity) ===
+const createFireIcon = (size = 32, color = '#e74c3c') => {
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  
+  // Effacer le canvas
+  ctx.clearRect(0, 0, size, size);
+  
+  // Dessiner l'icône 🔥 avec un effet de lueur
+  const fontSize = size * 0.7;
+  ctx.font = `${fontSize}px Arial, "Segoe UI Emoji", "Apple Color Emoji", sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  
+  // Effet de lueur selon la couleur
+  ctx.shadowColor = color;
+  ctx.shadowBlur = size * 0.3;
+  
+  // Dessiner le texte
+  ctx.fillText('🔥', size / 2, size / 2 + size * 0.05);
+  
+  return canvas;
+};
+
 const Map = ({
   fires,
   showHeatmap,
@@ -188,6 +245,8 @@ const Map = ({
   const sdisSourceId = 'sdis-source';
   const sdisLayerId = 'sdis-layer';
   const [omProtocolReady, setOmProtocolReady] = useState(false);
+  const animationRef = useRef(null);
+  const highIntensityLayerId = 'fires-high-intensity';
 
   // === VÉRIFICATION ET INITIALISATION DU PROTOCOLE OM ===
   useEffect(() => {
@@ -202,7 +261,6 @@ const Map = ({
     } else {
       console.warn('⚠️ OMWeatherMapLayer non chargé');
       
-      // Tentative de chargement alternatif
       const script = document.createElement('script');
       script.src = 'https://unpkg.com/@openmeteo/weather-map-layer@0.0.20/dist/index.js';
       script.onload = () => {
@@ -250,13 +308,10 @@ const Map = ({
       },
       center: [2.2, 46.6],
       zoom: 6,
-      // === CORRECTION DE L'ATTRIBUTION ===
-      // Désactiver le contrôle d'attribution par défaut pour le personnaliser
       attributionControl: false,
     });
 
-    // === AJOUTER UN CONTRÔLE D'ATTRIBUTION PERSONNALISÉ ===
-    // Cela évite le double affichage "OpenStreetMap | MapLibre"
+    // === CONTRÔLE D'ATTRIBUTION PERSONNALISÉ ===
     mapRef.current.addControl(new maplibregl.AttributionControl({
       compact: true,
       customAttribution: [
@@ -265,81 +320,187 @@ const Map = ({
       ],
     }), 'bottom-right');
 
-    // === AJOUTER LES AUTRES CONTRÔLES ===
     mapRef.current.addControl(new maplibregl.NavigationControl(), 'top-right');
 
     mapRef.current.on('load', () => {
       console.log('✅ Carte MapLibre chargée');
       setMapLoaded(true);
 
-      // === FEUX ===
+      // === SOURCE POUR LES FEUX ===
       mapRef.current.addSource('fires', {
         type: 'geojson',
         data: { type: 'FeatureCollection', features: [] }
       });
 
+      // === 1. HEATMAP - Vue d'ensemble de la densité ===
       mapRef.current.addLayer({
-        id: 'fires-layer',
+        id: 'fires-heatmap',
+        type: 'heatmap',
+        source: 'fires',
+        maxzoom: 15,
+        paint: {
+          // Poids de la heatmap basé sur FRP
+          'heatmap-weight': [
+            'interpolate',
+            ['linear'],
+            ['get', 'frp'],
+            0, 0,
+            10, 0.5,
+            50, 1,
+            100, 2
+          ],
+          'heatmap-intensity': [
+            'interpolate',
+            ['linear'],
+            ['zoom'],
+            0, 1,
+            9, 3,
+            12, 5
+          ],
+          'heatmap-color': [
+            'interpolate',
+            ['linear'],
+            ['heatmap-density'],
+            0, 'rgba(33,102,172,0)',
+            0.2, 'rgba(103,169,207,0.5)',
+            0.4, 'rgba(209,229,240,0.7)',
+            0.6, 'rgba(253,219,199,0.8)',
+            0.8, 'rgba(239,138,98,0.9)',
+            0.9, 'rgba(255,201,75,0.95)',
+            1, 'rgba(255,0,0,1)'
+          ],
+          'heatmap-radius': [
+            'interpolate',
+            ['linear'],
+            ['zoom'],
+            0, 2,
+            9, 20,
+            12, 40
+          ],
+          'heatmap-opacity': showHeatmap ? 0.8 : 0,
+        }
+      });
+
+      // === 2. POINTS POUR LES FEUX INTENSES (FRP > 50) ===
+      // Ajouter l'icône 🔥 pour les feux intenses
+      const highIntensityIcon = createFireIcon(32, '#e74c3c');
+      const highIntensityData = highIntensityIcon.toDataURL('image/png');
+      
+      mapRef.current.loadImage(highIntensityData, (error, image) => {
+        if (error) {
+          console.error('❌ Erreur chargement icône:', error);
+          // Fallback: utiliser des cercles
+          mapRef.current.addLayer({
+            id: highIntensityLayerId,
+            type: 'circle',
+            source: 'fires',
+            filter: ['>', ['get', 'frp'], 50],
+            paint: {
+              'circle-radius': 10,
+              'circle-color': '#e74c3c',
+              'circle-stroke-width': 2,
+              'circle-stroke-color': '#ffffff',
+              'circle-opacity': 0.9,
+            },
+          });
+          return;
+        }
+        
+        mapRef.current.addImage('fire-icon-high', image);
+        
+        mapRef.current.addLayer({
+          id: highIntensityLayerId,
+          type: 'symbol',
+          source: 'fires',
+          filter: ['>', ['get', 'frp'], 50],
+          layout: {
+            'icon-image': 'fire-icon-high',
+            'icon-size': 0.7,
+            'icon-allow-overlap': true,
+          },
+          paint: {
+            'icon-opacity': 0.9,
+          },
+        });
+      });
+
+      // === 3. CERCLES POUR LES FEUX MOYENS (FRP 10-50) ===
+      mapRef.current.addLayer({
+        id: 'fires-medium',
         type: 'circle',
         source: 'fires',
+        filter: ['all', ['>', ['get', 'frp'], 10], ['<=', ['get', 'frp'], 50]],
         paint: {
-          'circle-radius': 8,
-          'circle-color': '#e67e22',
-          'circle-stroke-width': 2,
+          'circle-radius': 6,
+          'circle-color': '#f39c12',
+          'circle-stroke-width': 1.5,
           'circle-stroke-color': '#ffffff',
           'circle-opacity': 0.8,
         },
       });
 
-      mapRef.current.on('click', 'fires-layer', (e) => {
+      // === 4. PETITS CERCLES POUR LES FEUX FAIBLES (FRP < 10) ===
+      mapRef.current.addLayer({
+        id: 'fires-low',
+        type: 'circle',
+        source: 'fires',
+        filter: ['<', ['get', 'frp'], 10],
+        paint: {
+          'circle-radius': 4,
+          'circle-color': '#3498db',
+          'circle-stroke-width': 1,
+          'circle-stroke-color': '#ffffff',
+          'circle-opacity': 0.6,
+        },
+      });
+
+      // === POPUPS POUR LES FEUX INTENSES ===
+      mapRef.current.on('click', highIntensityLayerId, (e) => {
+        const props = e.features[0].properties;
+        const popupContent = `
+          <strong>🔥 Feu intense</strong><br/>
+          <b>FRP:</b> ${props.frp.toFixed(1)} MW<br/>
+          <b>Confiance:</b> ${props.confidence}<br/>
+          <b>Date:</b> ${props.acq_date}<br/>
+          <b>Heure:</b> ${props.acq_time}<br/>
+          ${props.type ? `<b>Type:</b> ${props.type}` : ''}<br/>
+          <b>Satellite:</b> ${props.satellite || 'N/A'}<br/>
+          <hr style="margin:4px 0;border:none;border-top:1px solid #eee;"/>
+          <b>Coordonnées:</b><br/>
+          Lat: ${e.lngLat.lat.toFixed(4)}, Lon: ${e.lngLat.lng.toFixed(4)}
+        `;
+        new maplibregl.Popup()
+          .setLngLat(e.lngLat)
+          .setHTML(popupContent)
+          .addTo(mapRef.current);
+      });
+
+      // === POPUPS POUR LES FEUX MOYENS ===
+      mapRef.current.on('click', 'fires-medium', (e) => {
         const props = e.features[0].properties;
         new maplibregl.Popup()
           .setLngLat(e.lngLat)
           .setHTML(`
             <strong>🔥 Feu</strong><br/>
-            <b>Confiance:</b> ${props.confidence}<br/>
             <b>FRP:</b> ${props.frp.toFixed(1)} MW<br/>
+            <b>Confiance:</b> ${props.confidence}<br/>
             <b>Date:</b> ${props.acq_date}<br/>
-            ${props.type ? `<b>Type:</b> ${props.type}` : ''}
+            <b>Heure:</b> ${props.acq_time}<br/>
           `)
           .addTo(mapRef.current);
       });
 
-      mapRef.current.on('mouseenter', 'fires-layer', () => {
-        mapRef.current.getCanvas().style.cursor = 'pointer';
-      });
-      mapRef.current.on('mouseleave', 'fires-layer', () => {
-        mapRef.current.getCanvas().style.cursor = '';
-      });
-
-      // === ALERTES ===
-      mapRef.current.addSource('alerts', {
-        type: 'geojson',
-        data: { type: 'FeatureCollection', features: [] }
+      // === INTERACTIONS SOURIS ===
+      [highIntensityLayerId, 'fires-medium', 'fires-low'].forEach(layerId => {
+        mapRef.current.on('mouseenter', layerId, () => {
+          mapRef.current.getCanvas().style.cursor = 'pointer';
+        });
+        mapRef.current.on('mouseleave', layerId, () => {
+          mapRef.current.getCanvas().style.cursor = '';
+        });
       });
 
-      mapRef.current.addLayer({
-        id: 'alerts-layer',
-        type: 'circle',
-        source: 'alerts',
-        paint: {
-          'circle-radius': 20,
-          'circle-color': '#e74c3c',
-          'circle-opacity': 0.3,
-          'circle-stroke-width': 2,
-          'circle-stroke-color': '#e74c3c',
-        },
-      });
-
-      mapRef.current.on('click', 'alerts-layer', (e) => {
-        const count = e.features[0].properties.count;
-        new maplibregl.Popup()
-          .setLngLat(e.lngLat)
-          .setHTML(`🔥 Hotspot : ${count} feux dans un rayon de 5 km`)
-          .addTo(mapRef.current);
-      });
-
-      // === SDIS ===
+      // === SOURCE ET COUCHE SDIS ===
       mapRef.current.addSource(sdisSourceId, {
         type: 'geojson',
         data: { type: 'FeatureCollection', features: [] }
@@ -377,6 +538,33 @@ const Map = ({
       });
       mapRef.current.on('mouseleave', sdisLayerId, () => {
         mapRef.current.getCanvas().style.cursor = '';
+      });
+
+      // === SOURCE ET COUCHE ALERTES ===
+      mapRef.current.addSource('alerts', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] }
+      });
+
+      mapRef.current.addLayer({
+        id: 'alerts-layer',
+        type: 'circle',
+        source: 'alerts',
+        paint: {
+          'circle-radius': 20,
+          'circle-color': '#e74c3c',
+          'circle-opacity': 0.3,
+          'circle-stroke-width': 2,
+          'circle-stroke-color': '#e74c3c',
+        },
+      });
+
+      mapRef.current.on('click', 'alerts-layer', (e) => {
+        const count = e.features[0].properties.count;
+        new maplibregl.Popup()
+          .setLngLat(e.lngLat)
+          .setHTML(`🔥 Hotspot : ${count} feux dans un rayon de 5 km`)
+          .addTo(mapRef.current);
       });
 
       // === MÉTÉO AVEC OM PROTOCOL ===
@@ -444,10 +632,12 @@ const Map = ({
       if (windData && showWind) updateWindLayer(windData);
 
       startWindAnimation();
+      startFireAnimation();
     });
 
     return () => {
       stopWindAnimation();
+      stopFireAnimation();
       if (mapRef.current) {
         mapRef.current.remove();
         mapRef.current = null;
@@ -456,51 +646,30 @@ const Map = ({
     };
   }, []);
 
-  // === AJOUT DES SOURCES MÉTÉO OM ===
-  const addWeatherSources = () => {
-    if (!mapRef.current || !omProtocolReady) return;
-
-    console.log('🌦️ Ajout des sources météo OM...');
-
-    WEATHER_LAYERS.forEach(weatherLayer => {
-      const sourceId = `weather-om-${weatherLayer.value}`;
-      const layerId = `weather-layer-om-${weatherLayer.value}`;
-      
-      try {
-        const omUrl = `https://map-tiles.open-meteo.com/data_spatial/dwd_icon/latest.json?variable=${weatherLayer.layer}`;
-        
-        mapRef.current.addSource(sourceId, {
-          url: `om://${omUrl}`,
-          type: 'raster',
-          maxzoom: 12,
-        });
-
-        mapRef.current.addLayer({
-          id: layerId,
-          type: 'raster',
-          source: sourceId,
-          paint: {
-            'raster-opacity': 0.6,
-          },
-        });
-
-        console.log(`✅ Source OM ajoutée: ${weatherLayer.layer}`);
-      } catch (error) {
-        console.warn(`⚠️ Erreur lors de l'ajout de la source OM ${weatherLayer.layer}:`, error);
-      }
-    });
-  };
-
   // === MISE À JOUR DES FEUX ===
   const updateFireMarkers = (fires) => {
     if (!mapRef.current || !mapLoaded) return;
     const source = mapRef.current.getSource('fires');
-    if (source) source.setData(createFireGeoJSON(fires));
+    if (source) {
+      const geoJSON = createFireGeoJSON(fires);
+      source.setData(geoJSON);
+    }
   };
 
   useEffect(() => {
     updateFireMarkers(fires);
   }, [fires, mapLoaded]);
+
+  // === MISE À JOUR DE LA HEATMAP (toggle) ===
+  useEffect(() => {
+    if (!mapRef.current || !mapLoaded) return;
+    
+    try {
+      mapRef.current.setPaintProperty('fires-heatmap', 'heatmap-opacity', showHeatmap ? 0.8 : 0);
+    } catch (e) {
+      // Ignorer si la couche n'existe pas encore
+    }
+  }, [showHeatmap, mapLoaded]);
 
   // === MISE À JOUR DES ALERTES ===
   useEffect(() => {
@@ -553,6 +722,41 @@ const Map = ({
       if (source) source.setData({ type: 'FeatureCollection', features: [] });
     }
   }, [sdisLayers, mapLoaded]);
+
+  // === AJOUT DES SOURCES MÉTÉO OM ===
+  const addWeatherSources = () => {
+    if (!mapRef.current || !omProtocolReady) return;
+
+    console.log('🌦️ Ajout des sources météo OM...');
+
+    WEATHER_LAYERS.forEach(weatherLayer => {
+      const sourceId = `weather-om-${weatherLayer.value}`;
+      const layerId = `weather-layer-om-${weatherLayer.value}`;
+      
+      try {
+        const omUrl = `https://map-tiles.open-meteo.com/data_spatial/dwd_icon/latest.json?variable=${weatherLayer.layer}`;
+        
+        mapRef.current.addSource(sourceId, {
+          url: `om://${omUrl}`,
+          type: 'raster',
+          maxzoom: 12,
+        });
+
+        mapRef.current.addLayer({
+          id: layerId,
+          type: 'raster',
+          source: sourceId,
+          paint: {
+            'raster-opacity': 0.6,
+          },
+        });
+
+        console.log(`✅ Source OM ajoutée: ${weatherLayer.layer}`);
+      } catch (error) {
+        console.warn(`⚠️ Erreur lors de l'ajout de la source OM ${weatherLayer.layer}:`, error);
+      }
+    });
+  };
 
   // === GESTION DES COUCHES MÉTÉO OM ===
   useEffect(() => {
@@ -641,6 +845,60 @@ const Map = ({
       if (source) source.setData({ type: 'FeatureCollection', features: [] });
     }
   }, [showWind, windData, mapLoaded]);
+
+  // === ANIMATION DES POINTS INTENSES ===
+  const startFireAnimation = () => {
+    stopFireAnimation();
+    
+    let opacity = 0.9;
+    let opacityDirection = 0.01;
+    let scale = 0.7;
+    let scaleDirection = 0.01;
+    
+    const animate = () => {
+      if (!mapRef.current) {
+        stopFireAnimation();
+        return;
+      }
+      
+      // Mettre à jour l'opacité (effet de respiration)
+      opacity += opacityDirection;
+      if (opacity > 0.95) {
+        opacityDirection = -0.01;
+      } else if (opacity < 0.7) {
+        opacityDirection = 0.01;
+      }
+      
+      // Mettre à jour l'échelle (pulsation)
+      scale += scaleDirection;
+      if (scale > 0.85) {
+        scaleDirection = -0.01;
+      } else if (scale < 0.55) {
+        scaleDirection = 0.01;
+      }
+      
+      // Appliquer à la couche des feux intenses
+      try {
+        if (mapRef.current.getLayer(highIntensityLayerId)) {
+          mapRef.current.setPaintProperty(highIntensityLayerId, 'icon-opacity', opacity);
+          mapRef.current.setLayoutProperty(highIntensityLayerId, 'icon-size', scale);
+        }
+      } catch (e) {
+        // Ignorer si la couche n'existe pas
+      }
+      
+      animationRef.current = requestAnimationFrame(animate);
+    };
+    
+    animationRef.current = requestAnimationFrame(animate);
+  };
+
+  const stopFireAnimation = () => {
+    if (animationRef.current) {
+      cancelAnimationFrame(animationRef.current);
+      animationRef.current = null;
+    }
+  };
 
   // === MODE SOMBRE ===
   useEffect(() => {
