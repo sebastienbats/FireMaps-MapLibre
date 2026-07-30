@@ -1,37 +1,60 @@
 import React, { useState, useEffect } from 'react';
 import { getSources } from '../api';
 
-const Controls = ({ onFetch, onSourceChange, selectedSource, days, setDays, startDate, setStartDate, endDate, setEndDate, apiKey, setApiKey }) => {
+const Controls = ({
+  selectedSource,
+  onSourceChange,
+  days,
+  setDays,
+  startDate,
+  setStartDate,
+  endDate,
+  setEndDate,
+  apiKey,
+  setApiKey,
+  onFetch,
+}) => {
   const [sources, setSources] = useState([]);
+  const [loadingSources, setLoadingSources] = useState(false);
 
+  // Chargement des sources disponibles au montage
   useEffect(() => {
     const loadSources = async () => {
+      setLoadingSources(true);
       try {
         const srcList = await getSources();
         setSources(srcList);
+        // Si aucune source n'est sélectionnée, on sélectionne la première
         if (srcList.length > 0 && !selectedSource) {
           onSourceChange(srcList[0]);
         }
       } catch (error) {
-        console.error('Erreur chargement sources:', error);
+        console.error('Erreur lors du chargement des sources:', error);
+      } finally {
+        setLoadingSources(false);
       }
     };
     loadSources();
-  }, []);
+  }, []); // exécuté une seule fois
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    onFetch();
+    onFetch(); // déclenche la récupération des données
   };
 
   return (
     <form onSubmit={handleSubmit} className="controls">
       <div className="control-group">
-        <label>Source</label>
-        <select value={selectedSource} onChange={(e) => onSourceChange(e.target.value)}>
+        <label htmlFor="source-select">Source de données</label>
+        <select
+          id="source-select"
+          value={selectedSource}
+          onChange={(e) => onSourceChange(e.target.value)}
+          disabled={loadingSources || sources.length === 0}
+        >
           {sources.map((src) => (
             <option key={src} value={src}>
-              {src.replace('_NRT', '').replace('_', ' ')}
+              {src}
             </option>
           ))}
         </select>
@@ -44,16 +67,18 @@ const Controls = ({ onFetch, onSourceChange, selectedSource, days, setDays, star
             type="date"
             value={startDate}
             onChange={(e) => setStartDate(e.target.value)}
+            placeholder="Date début"
           />
           <span>à</span>
           <input
             type="date"
             value={endDate}
             onChange={(e) => setEndDate(e.target.value)}
+            placeholder="Date fin"
           />
         </div>
         <div className="days-group">
-          <label>ou derniers jours</label>
+          <label>ou derniers jours :</label>
           <input
             type="number"
             min="1"
@@ -65,8 +90,9 @@ const Controls = ({ onFetch, onSourceChange, selectedSource, days, setDays, star
       </div>
 
       <div className="control-group">
-        <label>Clé API (optionnelle)</label>
+        <label htmlFor="api-key">Clé API (optionnelle)</label>
         <input
+          id="api-key"
           type="text"
           value={apiKey}
           onChange={(e) => setApiKey(e.target.value)}
@@ -74,7 +100,9 @@ const Controls = ({ onFetch, onSourceChange, selectedSource, days, setDays, star
         />
       </div>
 
-      <button type="submit">Charger les feux</button>
+      <button type="submit" disabled={loadingSources}>
+        Charger les feux
+      </button>
     </form>
   );
 };
