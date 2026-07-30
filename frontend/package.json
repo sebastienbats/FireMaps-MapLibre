@@ -1,5 +1,5 @@
 {
-  "name": "FireMaps-MapLibre-frontend",
+  "name": "firms-frontend",
   "version": "2.0.0",
   "private": true,
   "dependencies": {
@@ -11,8 +11,7 @@
     "react-hot-toast": "^2.4.1",
     "react-select": "^5.8.0",
     "react-spinners": "^0.13.8",
-    "maplibre-gl": "^4.7.0",
-    "@openmeteo/weather-map-layer": "^1.0.0"
+    "maplibre-gl": "^4.7.0"
   },
   "scripts": {
     "start": "react-scripts start",
