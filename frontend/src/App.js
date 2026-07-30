@@ -1,452 +1,145 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Toaster, toast } from 'react-hot-toast';
+import React, { useState, useEffect, useRef } from 'react';
+import maplibregl from 'maplibregl';
+import 'maplibregl/dist/maplibregl.css';
+import { getFires, getSources } from './api';
+import Controls from './components/Controls';
 import './App.css';
-import Map from './components/Map/Map';
-import Controls from './components/Controls/Controls';
-import FireChart from './components/Charts/FireChart';
-import Alerts from './components/Alerts/Alerts';
-import { getFires, getSources, exportCSV, exportGeoJSON } from './services/api';
-import { fetchWindData, getFallbackWindData } from './services/windService';
-import axios from 'axios';
 
 function App() {
-  // État des feux
-  const [fires, setFires] = useState([]);
-  const [filteredFires, setFilteredFires] = useState([]);
-  const [sources, setSources] = useState([]);
-  const [selectedSource, setSelectedSource] = useState('VIIRS_SNPP_NRT');
-  const [dayRange, setDayRange] = useState(3);
+  // État pour les paramètres de recherche
+  const [source, setSource] = useState('VIIRS_SNPP_NRT'); // valeur par défaut en chaîne
+  const [days, setDays] = useState(3);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [apiKey, setApiKey] = useState(''); // on laisse vide, l'utilisateur la saisit
+
+  // État des données et chargement
+  const [fireData, setFireData] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [lastUpdate, setLastUpdate] = useState(null);
-  const [apiInfo, setApiInfo] = useState(null);
+  const [error, setError] = useState(null);
 
-  // État des couches
-  const [showHeatmap, setShowHeatmap] = useState(false);
-  const [showSdis, setShowSdis] = useState(false);
-  const [showWind, setShowWind] = useState(false);
-  const [windData, setWindData] = useState(null);
-  const [windLoading, setWindLoading] = useState(false);
-  const [windError, setWindError] = useState(false);
+  // Référence à la carte
+  const mapContainer = useRef(null);
+  const map = useRef(null);
 
-  // État des couches météo (MapLibre)
-  const [activeWeatherLayers, setActiveWeatherLayers] = useState([]);
-  const [weatherOpacity, setWeatherOpacity] = useState(0.6);
-
-  // État SDIS
-  const [sdisLayers, setSdisLayers] = useState([]);
-  const [sdisLoading, setSdisLoading] = useState(false);
-  const [customSdisUrl, setCustomSdisUrl] = useState('');
-
-  // État UI
-  const [darkMode, setDarkMode] = useState(localStorage.getItem('darkMode') === 'true');
-  const [alerts, setAlerts] = useState([]);
-
-  // Fonction distance (helper)
-  const distance = useCallback((lat1, lon1, lat2, lon2) => {
-    const R = 6371;
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = Math.sin(dLat / 2) ** 2 +
-              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-              Math.sin(dLon / 2) ** 2;
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return (R * c) / 111;
-  }, []);
-
-  // Détection des hotspots (alertes)
-  const detectHotspots = useCallback((fires) => {
-    const RADIUS_DEG = 0.1;
-    const MIN_FIRES = 5;
-    const hotspots = [];
-
-    for (let i = 0; i < fires.length; i++) {
-      let count = 1;
-      for (let j = i + 1; j < fires.length; j++) {
-        const d = distance(
-          fires[i].latitude, fires[i].longitude,
-          fires[j].latitude, fires[j].longitude
-        );
-        if (d < RADIUS_DEG) count++;
-      }
-      if (count >= MIN_FIRES) {
-        hotspots.push({
-          lat: fires[i].latitude,
-          lng: fires[i].longitude,
-          count
-        });
-      }
-    }
-
-    const unique = [];
-    for (const h of hotspots) {
-      let dup = false;
-      for (const u of unique) {
-        if (distance(h.lat, h.lng, u.lat, u.lng) < RADIUS_DEG * 0.5) {
-          dup = true;
-          break;
-        }
-      }
-      if (!dup) unique.push(h);
-    }
-    setAlerts(unique);
-  }, [distance]);
-
-  // Mettre à jour les alertes quand les feux filtrés changent
-  useEffect(() => {
-    if (filteredFires.length > 0) {
-      detectHotspots(filteredFires);
-    } else {
-      setAlerts([]);
-    }
-  }, [filteredFires, detectHotspots]);
-
-  // Charger les sources au démarrage
-  useEffect(() => {
-    const loadSources = async () => {
-      try {
-        const data = await getSources();
-        setSources(Object.entries(data.sources).map(([key, label]) => ({ value: key, label })));
-      } catch (error) {
-        toast.error('Erreur lors du chargement des sources');
-      }
-    };
-    loadSources();
-  }, []);
-
-  // Appliquer le mode sombre
-  useEffect(() => {
-    document.body.className = darkMode ? 'dark' : '';
-    localStorage.setItem('darkMode', darkMode);
-  }, [darkMode]);
-
-  // ============================================================
-  // VENT
-  // ============================================================
-  const loadWindData = useCallback(async () => {
-    if (windLoading) return;
-    setWindLoading(true);
-    setWindError(false);
-    const toastId = toast.loading('🌬️ Chargement des données vent...');
-    try {
-      let data = await fetchWindData();
-      if (!data) data = getFallbackWindData();
-      if (data) {
-        setWindData(data);
-        toast.success('🌬️ Données vent chargées', { id: toastId });
-        setWindError(false);
-      } else {
-        throw new Error('Aucune donnée de vent disponible');
-      }
-    } catch (error) {
-      console.error('❌ Erreur vent:', error);
-      setWindError(true);
-      toast.error('❌ Impossible de charger les données vent', { id: toastId });
-      setShowWind(false);
-    } finally {
-      setWindLoading(false);
-    }
-  }, [windLoading]);
-
-  const handleWindToggle = useCallback(async () => {
-    if (showWind) {
-      setShowWind(false);
-      setWindData(null);
-      toast.success('🌬️ Couche vent désactivée');
-    } else {
-      setShowWind(true);
-      if (!windData && !windError) {
-        await loadWindData();
-      } else if (windError) {
-        toast.error('🌬️ Données vent indisponibles. Réessayez plus tard.');
-        setShowWind(false);
-      }
-    }
-  }, [showWind, windData, windError, loadWindData]);
-
-  // ============================================================
-  // SDIS
-  // ============================================================
-  const loadSdisLayer = async (url, label) => {
-    if (!url) {
-      toast.error('⚠️ URL invalide');
-      return;
-    }
-    setSdisLoading(true);
-    const toastId = toast.loading(`🚒 Chargement des casernes ${label}...`);
-    try {
-      const response = await axios.get(url, { timeout: 30000 });
-      if (response.data && response.data.features) {
-        const newLayer = {
-          id: `sdis-${Date.now()}`,
-          label: label,
-          url: url,
-          data: response.data
-        };
-        setSdisLayers(prev => [...prev, newLayer]);
-        toast.success(`✅ ${response.data.features.length} casernes chargées (${label})`, { id: toastId });
-        if (!showSdis) setShowSdis(true);
-      } else {
-        throw new Error('Format GeoJSON invalide');
-      }
-    } catch (error) {
-      console.error('❌ Erreur SDIS:', error);
-      toast.error(`❌ Erreur lors du chargement des casernes ${label}`, { id: toastId });
-    } finally {
-      setSdisLoading(false);
-    }
-  };
-
-  const loadSdisPreset = (preset) => {
-    loadSdisLayer(preset.url, preset.label);
-  };
-
-  const loadSdisCustom = () => {
-    if (customSdisUrl.trim()) {
-      loadSdisLayer(customSdisUrl.trim(), 'personnalisé');
-    }
-  };
-
-  const clearSdisLayers = () => {
-    setSdisLayers([]);
-    setShowSdis(false);
-    toast.success('🚒 Couches SDIS supprimées');
-  };
-
-  // ============================================================
-  // FEUX
-  // ============================================================
-  const fetchFires = useCallback(async () => {
-    const apiKey = localStorage.getItem('firms_map_key');
-    if (!apiKey || apiKey.trim() === '') {
-      toast.error('⚠️ Veuillez entrer votre clé API FIRMS dans les paramètres');
-      return;
-    }
+  // Fonction de récupération des feux (corrigée)
+  const fetchFires = async () => {
     setLoading(true);
+    setError(null);
     try {
-      const data = await getFires({
-        source: selectedSource,
-        days: dayRange,
-        startDate,
-        endDate
-      });
-      setFires(data.data);
-      setFilteredFires(data.data);
-      setLastUpdate(data.timestamp);
-      setApiInfo({
-        format: data.format,
-        area: data.area,
-        total_world: data.total_world,
-        total_france: data.total_france,
-        count: data.count,
-        bbox: data.bbox
-      });
-      let message = `✅ ${data.count} feux en France`;
-      if (data.total_world) message += ` (${data.total_world} dans le monde, ${data.total_france} en France)`;
-      toast.success(message);
-    } catch (error) {
-      console.error('❌ Erreur:', error);
-      toast.error(error.message || 'Erreur lors du chargement des feux');
+      // Construction des paramètres
+      const params = { source }; // source est une chaîne, pas un index
+      if (startDate && endDate) {
+        params.startDate = startDate;
+        params.endDate = endDate;
+      } else {
+        params.days = days;
+      }
+      if (apiKey) params.apiKey = apiKey;
+
+      const data = await getFires(params);
+      setFireData(data);
+    } catch (err) {
+      setError(err.message || 'Erreur lors de la récupération des feux');
+      console.error('Erreur fetchFires:', err);
     } finally {
       setLoading(false);
     }
-  }, [selectedSource, dayRange, startDate, endDate]);
+  };
 
-  const handleFilterChange = useCallback((filters) => {
-    let filtered = [...fires];
-    if (filters.highConfidence) {
-      filtered = filtered.filter(f =>
-        ['high', 'h', '100', 'nominal'].includes(f.confidence?.toLowerCase())
-      );
-    }
-    if (filters.frp) {
-      filtered = filtered.filter(f => (f.frp || 0) >= 50);
-    }
-    setFilteredFires(filtered);
-  }, [fires]);
+  // Initialisation de la carte (une seule fois)
+  useEffect(() => {
+    if (!map.current) {
+      map.current = new maplibregl.Map({
+        container: mapContainer.current,
+        style: 'https://demotiles.maplibre.org/style.json', // tu peux changer le style
+        center: [2.0, 46.0], // France
+        zoom: 5,
+      });
 
-  // ============================================================
-  // EXPORT
-  // ============================================================
-  const handleExport = useCallback(async (format) => {
-    if (filteredFires.length === 0) {
-      toast.error('Aucune donnée à exporter');
-      return;
+      map.current.addControl(new maplibregl.NavigationControl(), 'top-right');
     }
-    try {
-      const result = format === 'csv'
-        ? await exportCSV(filteredFires)
-        : await exportGeoJSON(filteredFires);
-      toast.success(`✅ Export ${format.toUpperCase()} sauvegardé`);
-      window.open(result.downloadUrl, '_blank');
-    } catch (error) {
-      toast.error(error.message || 'Erreur lors de l\'export');
+
+    // Nettoyage
+    return () => {
+      if (map.current) {
+        map.current.remove();
+        map.current = null;
+      }
+    };
+  }, []);
+
+  // Ajout des données sur la carte quand elles changent
+  useEffect(() => {
+    if (!map.current || !fireData) return;
+
+    // Supprimer les couches et sources existantes (si présentes)
+    if (map.current.getSource('fires')) {
+      map.current.removeLayer('fires-layer');
+      map.current.removeSource('fires');
     }
-  }, [filteredFires]);
+
+    // Ajouter la source et la couche
+    map.current.addSource('fires', {
+      type: 'geojson',
+      data: fireData,
+    });
+
+    map.current.addLayer({
+      id: 'fires-layer',
+      type: 'circle',
+      source: 'fires',
+      paint: {
+        'circle-radius': 6,
+        'circle-color': [
+          'case',
+          ['==', ['get', 'confidence'], 'high'],
+          '#ff0000',
+          ['==', ['get', 'confidence'], 'medium'],
+          '#ff8800',
+          '#ffcc00',
+        ],
+        'circle-opacity': 0.8,
+        'circle-stroke-width': 1,
+        'circle-stroke-color': '#ffffff',
+      },
+    });
+
+    // Ajuster la vue pour inclure tous les points
+    const bounds = new maplibregl.LngLatBounds();
+    fireData.features.forEach(feature => {
+      const coords = feature.geometry.coordinates;
+      bounds.extend([coords[0], coords[1]]);
+    });
+    if (!bounds.isEmpty()) {
+      map.current.fitBounds(bounds, { padding: 50 });
+    }
+  }, [fireData]);
+
+  // Appel initial et lors des changements de paramètres
+  useEffect(() => {
+    fetchFires();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [source, days, startDate, endDate]);
 
   return (
-    <div className={`app ${darkMode ? 'dark' : ''}`}>
-      <Toaster
-        position="top-right"
-        toastOptions={{
-          duration: 4000,
-          style: {
-            background: darkMode ? '#1f2937' : '#ffffff',
-            color: darkMode ? '#e5e7eb' : '#1f2937',
-          },
-        }}
+    <div className="App">
+      <Controls
+        selectedSource={source}
+        onSourceChange={setSource}
+        days={days}
+        setDays={setDays}
+        startDate={startDate}
+        setStartDate={setStartDate}
+        endDate={endDate}
+        setEndDate={setEndDate}
+        apiKey={apiKey}
+        setApiKey={setApiKey}
+        onFetch={fetchFires}
       />
-
-      <header className="app-header">
-        <h1>
-          <span className="fire-icon">🔥</span> 
-          Feux & Vents & Météo & SDIS
-        </h1>
-        <div className="header-controls">
-          <button
-            onClick={() => setDarkMode(!darkMode)}
-            className="dark-toggle"
-            aria-label="Basculer le mode sombre"
-          >
-            {darkMode ? '☀️' : '🌙'}
-          </button>
-          <span className="header-subtitle">NASA FIRMS • Open‑Meteo • SDIS</span>
-        </div>
-      </header>
-
-      <main className="app-main">
-        <aside className="app-sidebar">
-          <Controls
-            sources={sources}
-            selectedSource={selectedSource}
-            setSelectedSource={setSelectedSource}
-            dayRange={dayRange}
-            setDayRange={setDayRange}
-            startDate={startDate}
-            setStartDate={setStartDate}
-            endDate={endDate}
-            setEndDate={setEndDate}
-            onFetch={fetchFires}
-            onFilterChange={handleFilterChange}
-            onExport={handleExport}
-            loading={loading}
-            showHeatmap={showHeatmap}
-            setShowHeatmap={setShowHeatmap}
-            showSdis={showSdis}
-            setShowSdis={setShowSdis}
-            showWind={showWind}
-            setShowWind={handleWindToggle}
-            windLoading={windLoading}
-            darkMode={darkMode}
-            activeWeatherLayers={activeWeatherLayers}
-            setActiveWeatherLayers={setActiveWeatherLayers}
-            weatherOpacity={weatherOpacity}
-            setWeatherOpacity={setWeatherOpacity}
-            sdisLayers={sdisLayers}
-            setSdisLayers={setSdisLayers}
-            sdisLoading={sdisLoading}
-            loadSdisPreset={loadSdisPreset}
-            loadSdisCustom={loadSdisCustom}
-            clearSdisLayers={clearSdisLayers}
-            customSdisUrl={customSdisUrl}
-            setCustomSdisUrl={setCustomSdisUrl}
-          />
-
-          <div className="stats-panel">
-            <div className="stat-item">
-              <span className="stat-label">Feux en France</span>
-              <span className="stat-value">{filteredFires.length}</span>
-            </div>
-            {apiInfo && (
-              <>
-                <div className="stat-item">
-                  <span className="stat-label">Total dans le monde</span>
-                  <span className="stat-value small">{apiInfo.total_world?.toLocaleString() || 'N/A'}</span>
-                </div>
-                <div className="stat-item">
-                  <span className="stat-label">Total en France</span>
-                  <span className="stat-value small">{apiInfo.total_france?.toLocaleString() || 'N/A'}</span>
-                </div>
-                <div className="stat-item">
-                  <span className="stat-label">Format</span>
-                  <span className="stat-value small">{apiInfo.format || 'N/A'}</span>
-                </div>
-                <div className="stat-item">
-                  <span className="stat-label">Zone</span>
-                  <span className="stat-value small">{apiInfo.area || 'N/A'}</span>
-                </div>
-              </>
-            )}
-            {lastUpdate && (
-              <div className="stat-item">
-                <span className="stat-label">Mise à jour</span>
-                <span className="stat-value small">
-                  {new Date(lastUpdate).toLocaleString('fr-FR')}
-                </span>
-              </div>
-            )}
-            {windData && (
-              <div className="stat-item">
-                <span className="stat-label">Vent</span>
-                <span className="stat-value small">✅ Chargé</span>
-              </div>
-            )}
-            {windError && (
-              <div className="stat-item">
-                <span className="stat-label">Vent</span>
-                <span className="stat-value small" style={{ color: '#e74c3c' }}>❌ Indisponible</span>
-              </div>
-            )}
-            {activeWeatherLayers.length > 0 && (
-              <div className="stat-item">
-                <span className="stat-label">Météo</span>
-                <span className="stat-value small">✅ {activeWeatherLayers.length} couche(s)</span>
-              </div>
-            )}
-            {sdisLayers.length > 0 && (
-              <div className="stat-item">
-                <span className="stat-label">SDIS</span>
-                <span className="stat-value small">✅ {sdisLayers.length} département(s)</span>
-              </div>
-            )}
-          </div>
-
-          {alerts.length > 0 && <Alerts alerts={alerts} />}
-        </aside>
-
-        <div className="app-content">
-          <div className="map-container">
-            <Map
-              fires={filteredFires}
-              showHeatmap={showHeatmap}
-              showSdis={showSdis}
-              darkMode={darkMode}
-              alerts={alerts}
-              showWind={showWind}
-              windData={windData}
-              onWindToggle={handleWindToggle}
-              activeWeatherLayers={activeWeatherLayers}
-              weatherOpacity={weatherOpacity}
-              sdisLayers={sdisLayers}
-            />
-          </div>
-          <div className="chart-container">
-            <FireChart fires={filteredFires} darkMode={darkMode} />
-          </div>
-        </div>
-      </main>
-
-      <footer className="app-footer">
-        <p>
-          Données feux : <a href="https://firms.modaps.eosdis.nasa.gov/" target="_blank" rel="noopener noreferrer">NASA FIRMS</a> •
-          Données vent/météo : <a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Open‑Meteo</a> •
-          SDIS : <a href="https://data.gouv.fr/" target="_blank" rel="noopener noreferrer">data.gouv.fr</a>
-        </p>
-        <p style={{ fontSize: '0.7rem', opacity: 0.6, marginTop: '2px' }}>
-          Version 2.0.0 • MapLibre GL JS • Open-Meteo OM • {new Date().getFullYear()}
-        </p>
-      </footer>
+      {loading && <div className="loading-overlay">Chargement des feux...</div>}
+      {error && <div className="error-message">Erreur : {error}</div>}
+      <div ref={mapContainer} className="map-container" />
     </div>
   );
 }
