@@ -1,34 +1,29 @@
 import React, { useState, useEffect, useRef } from 'react';
-import maplibregl from 'maplibregl';
-import 'maplibregl/dist/maplibregl.css';
-import { getFires, getSources } from './api';
+import maplibregl from 'maplibre-gl';
+import 'maplibre-gl/dist/maplibre-gl.css';
+import { getFires } from './api';
 import Controls from './components/Controls';
 import './App.css';
 
 function App() {
-  // État pour les paramètres de recherche
-  const [source, setSource] = useState('VIIRS_SNPP_NRT'); // valeur par défaut en chaîne
+  const [source, setSource] = useState('VIIRS_SNPP_NRT');
   const [days, setDays] = useState(3);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [apiKey, setApiKey] = useState(''); // on laisse vide, l'utilisateur la saisit
+  const [apiKey, setApiKey] = useState('');
 
-  // État des données et chargement
   const [fireData, setFireData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // Référence à la carte
   const mapContainer = useRef(null);
   const map = useRef(null);
 
-  // Fonction de récupération des feux (corrigée)
   const fetchFires = async () => {
     setLoading(true);
     setError(null);
     try {
-      // Construction des paramètres
-      const params = { source }; // source est une chaîne, pas un index
+      const params = { source };
       if (startDate && endDate) {
         params.startDate = startDate;
         params.endDate = endDate;
@@ -47,20 +42,17 @@ function App() {
     }
   };
 
-  // Initialisation de la carte (une seule fois)
   useEffect(() => {
     if (!map.current) {
       map.current = new maplibregl.Map({
         container: mapContainer.current,
-        style: 'https://demotiles.maplibre.org/style.json', // tu peux changer le style
-        center: [2.0, 46.0], // France
+        style: 'https://demotiles.maplibre.org/style.json',
+        center: [2.0, 46.0],
         zoom: 5,
       });
-
       map.current.addControl(new maplibregl.NavigationControl(), 'top-right');
     }
 
-    // Nettoyage
     return () => {
       if (map.current) {
         map.current.remove();
@@ -69,17 +61,14 @@ function App() {
     };
   }, []);
 
-  // Ajout des données sur la carte quand elles changent
   useEffect(() => {
     if (!map.current || !fireData) return;
 
-    // Supprimer les couches et sources existantes (si présentes)
     if (map.current.getSource('fires')) {
       map.current.removeLayer('fires-layer');
       map.current.removeSource('fires');
     }
 
-    // Ajouter la source et la couche
     map.current.addSource('fires', {
       type: 'geojson',
       data: fireData,
@@ -105,7 +94,6 @@ function App() {
       },
     });
 
-    // Ajuster la vue pour inclure tous les points
     const bounds = new maplibregl.LngLatBounds();
     fireData.features.forEach(feature => {
       const coords = feature.geometry.coordinates;
@@ -116,7 +104,6 @@ function App() {
     }
   }, [fireData]);
 
-  // Appel initial et lors des changements de paramètres
   useEffect(() => {
     fetchFires();
     // eslint-disable-next-line react-hooks/exhaustive-deps
