@@ -191,22 +191,18 @@ const Map = ({
 
   // === VÉRIFICATION ET INITIALISATION DU PROTOCOLE OM ===
   useEffect(() => {
-    // Vérifier que l'objet global OMWeatherMapLayer est disponible
     if (typeof window !== 'undefined' && window.OMWeatherMapLayer) {
       console.log('🌦️ OMWeatherMapLayer chargé via UNPKG');
       
-      // Enregistrer le protocole OM
       if (maplibregl && typeof maplibregl.addProtocol === 'function') {
         maplibregl.addProtocol('om', window.OMWeatherMapLayer.omProtocol);
         setOmProtocolReady(true);
         console.log('✅ Protocole OM enregistré');
-      } else {
-        console.warn('⚠️ maplibregl.addProtocol non disponible');
       }
     } else {
-      console.warn('⚠️ OMWeatherMapLayer non chargé, vérifiez le script UNPKG dans index.html');
+      console.warn('⚠️ OMWeatherMapLayer non chargé');
       
-      // Tentative de chargement alternatif si le script n'est pas chargé
+      // Tentative de chargement alternatif
       const script = document.createElement('script');
       script.src = 'https://unpkg.com/@openmeteo/weather-map-layer@0.0.20/dist/index.js';
       script.onload = () => {
@@ -239,7 +235,7 @@ const Map = ({
             type: 'raster',
             tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
             tileSize: 256,
-            attribution: '© OpenStreetMap',
+            attribution: '© OpenStreetMap contributors',
           }
         },
         layers: [
@@ -254,11 +250,23 @@ const Map = ({
       },
       center: [2.2, 46.6],
       zoom: 6,
-      attributionControl: true,
+      // === CORRECTION DE L'ATTRIBUTION ===
+      // Désactiver le contrôle d'attribution par défaut pour le personnaliser
+      attributionControl: false,
     });
 
+    // === AJOUTER UN CONTRÔLE D'ATTRIBUTION PERSONNALISÉ ===
+    // Cela évite le double affichage "OpenStreetMap | MapLibre"
+    mapRef.current.addControl(new maplibregl.AttributionControl({
+      compact: true,
+      customAttribution: [
+        '© <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors',
+        'Données météo © <a href="https://open-meteo.com/" target="_blank">Open‑Meteo</a>',
+      ],
+    }), 'bottom-right');
+
+    // === AJOUTER LES AUTRES CONTRÔLES ===
     mapRef.current.addControl(new maplibregl.NavigationControl(), 'top-right');
-    mapRef.current.addControl(new maplibregl.AttributionControl(), 'bottom-right');
 
     mapRef.current.on('load', () => {
       console.log('✅ Carte MapLibre chargée');
@@ -372,12 +380,10 @@ const Map = ({
       });
 
       // === MÉTÉO AVEC OM PROTOCOL ===
-      // Ajouter les sources OM si le protocole est prêt
       if (omProtocolReady) {
         addWeatherSources();
       } else {
         console.log('⏳ Attente du protocole OM pour les couches météo...');
-        // Réessayer après un court délai
         setTimeout(() => {
           if (omProtocolReady) {
             addWeatherSources();
@@ -554,7 +560,6 @@ const Map = ({
 
     const activeLayerValues = activeWeatherLayers.map(l => l.value);
 
-    // Supprimer les couches inactives
     Object.keys(weatherSourcesRef.current).forEach(key => {
       if (!activeLayerValues.includes(key)) {
         try {
@@ -569,7 +574,6 @@ const Map = ({
       }
     });
 
-    // Ajouter les couches actives
     activeWeatherLayers.forEach(layerDef => {
       const fullDef = WEATHER_LAYERS.find(w => w.value === layerDef.value);
       if (!fullDef) return;
