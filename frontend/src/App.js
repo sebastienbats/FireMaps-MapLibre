@@ -42,6 +42,23 @@ function App() {
     }
   };
 
+  // Vérifier que le backend est accessible
+  useEffect(() => {
+    const checkBackend = async () => {
+      try {
+        const response = await fetch('/api/health');
+        if (!response.ok) {
+          console.warn('⚠️ Backend non disponible (code:', response.status, ')');
+        } else {
+          console.log('✅ Backend accessible');
+        }
+      } catch (e) {
+        console.warn('⚠️ Backend injoignable – assurez-vous que le serveur tourne sur le port 5000');
+      }
+    };
+    checkBackend();
+  }, []);
+
   useEffect(() => {
     if (!map.current) {
       map.current = new maplibregl.Map({
