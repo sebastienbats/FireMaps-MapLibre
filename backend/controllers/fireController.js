@@ -18,12 +18,16 @@ const SOURCES = {
 };
 
 exports.getSources = (req, res) => {
+  console.log('📡 getSources appelé');
   res.json({ sources: Object.keys(SOURCES) });
 };
 
 exports.getFires = async (req, res) => {
+  console.log(`📡 getFires appelé avec params:`, req.query);
+  
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
+    console.log('❌ Erreurs de validation:', errors.array());
     return res.status(400).json({ errors: errors.array() });
   }
 
@@ -31,6 +35,7 @@ exports.getFires = async (req, res) => {
     const { source = 'VIIRS_SNPP_NRT', days = '1', startDate, endDate, apiKey } = req.query;
 
     if (!SOURCES[source]) {
+      console.log('❌ Source invalide:', source);
       return res.status(400).json({ error: 'Source invalide' });
     }
 
@@ -125,6 +130,7 @@ exports.getFires = async (req, res) => {
       features
     };
 
+    console.log(`✅ ${features.length} feux retournés`);
     res.json(geojson);
   } catch (error) {
     console.error('❌ Erreur dans getFires:', error);
