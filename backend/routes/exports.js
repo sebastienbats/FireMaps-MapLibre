@@ -1,15 +1,14 @@
 const express = require('express');
 const router = express.Router();
-const {
-  exportCSV,
-  exportGeoJSON,
-  listExports,
-  deleteExport
-} = require('../controllers/exportController');
+const { saveExport, listExports, deleteExport } = require('../controllers/exportController');
 
-router.post('/csv', exportCSV);
-router.post('/geojson', exportGeoJSON);
-router.get('/list', listExports);
+// Route pour sauvegarder un export (GeoJSON ou CSV)
+router.post('/', saveExport);
+
+// Route pour lister tous les fichiers exportés
+router.get('/', listExports);
+
+// Route pour supprimer un fichier exporté par son nom
 router.delete('/:filename', deleteExport);
 
 module.exports = router;
