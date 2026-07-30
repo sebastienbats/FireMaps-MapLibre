@@ -3,12 +3,12 @@ const path = require('path');
 
 const EXPORTS_DIR = path.join(__dirname, '../exports');
 
-// Assure que le dossier d'export existe
+// Création du dossier d'export s'il n'existe pas
 if (!fs.existsSync(EXPORTS_DIR)) {
   fs.mkdirSync(EXPORTS_DIR, { recursive: true });
 }
 
-// Sauvegarde des données (GeoJSON ou CSV) dans un fichier
+// ✅ Fonction d'export (correctement exportée)
 exports.saveExport = (req, res) => {
   try {
     const { filename, data, format = 'geojson' } = req.body;
@@ -24,8 +24,7 @@ exports.saveExport = (req, res) => {
     if (format === 'geojson') {
       content = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
     } else {
-      // Pour CSV, on attend une chaîne CSV
-      content = data;
+      content = data; // attend une chaîne CSV
     }
 
     fs.writeFileSync(fullPath, content, 'utf8');
@@ -36,7 +35,7 @@ exports.saveExport = (req, res) => {
   }
 };
 
-// --- Correction 5 : Liste des fichiers exportés ---
+// ✅ Liste des fichiers exportés
 exports.listExports = (req, res) => {
   try {
     const files = fs.readdirSync(EXPORTS_DIR)
@@ -49,14 +48,13 @@ exports.listExports = (req, res) => {
   }
 };
 
-// --- Correction 5 : Suppression d'un fichier exporté ---
+// ✅ Suppression d'un fichier
 exports.deleteExport = (req, res) => {
   try {
     const { filename } = req.params;
     if (!filename) {
       return res.status(400).json({ error: 'Nom de fichier requis' });
     }
-    // Sécurité : éviter les traversées de répertoires
     const safeName = path.basename(filename);
     const filePath = path.join(EXPORTS_DIR, safeName);
 
