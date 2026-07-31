@@ -1,1 +1,199 @@
-.fire-chart { width: 100%; height: 100%; min-height: 150px; }
+.fire-chart-container {
+  position: absolute;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 90%;
+  max-width: 1000px;
+  background: rgba(26, 26, 46, 0.92);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+  padding: 20px 24px;
+  z-index: 20;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  max-height: 60vh;
+  overflow: hidden;
+  animation: chartFadeIn 0.5s ease forwards;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.fire-chart-container:hover {
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.25);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+@keyframes chartFadeIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(20px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+.chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.chart-summary {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.summary-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 6px 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 10px;
+  min-width: 60px;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.summary-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+  transform: translateY(-1px);
+}
+
+.summary-label {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.4);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.summary-value {
+  font-size: 18px;
+  font-weight: 800;
+  color: #ffffff;
+}
+
+.summary-value.fire {
+  color: #e74c3c;
+}
+
+.summary-value.frp {
+  color: #f39c12;
+}
+
+.chart-controls {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.chart-type-selector,
+.time-range-selector {
+  display: flex;
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 4px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.chart-controls button {
+  padding: 6px 14px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  letter-spacing: 0.3px;
+}
+
+.chart-controls button:hover:not(.active) {
+  color: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.chart-controls button.active {
+  background: #e74c3c;
+  color: white;
+}
+
+.chart-main {
+  height: 300px;
+  position: relative;
+}
+
+.chart-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 300px;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.chart-empty-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+  opacity: 0.3;
+  animation: chartFloat 4s ease-in-out infinite;
+}
+
+.chart-empty p {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0;
+}
+
+@keyframes chartFloat {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+}
+
+@media (max-width: 1024px) {
+  .fire-chart-container {
+    width: 95%;
+    padding: 16px;
+  }
+}
+
+@media (max-width: 768px) {
+  .fire-chart-container {
+    width: 95%;
+    padding: 12px 16px;
+    bottom: 60px;
+    max-height: 50vh;
+  }
+
+  .chart-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .chart-summary {
+    justify-content: center;
+  }
+
+  .chart-controls {
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .chart-main {
+    height: 200px;
+  }
+
+  .summary-value {
+    font-size: 15px;
+  }
+
+  .chart-controls button {
+    font-size: 11px;
+    padding: 4px 10px;
+  }
+}
