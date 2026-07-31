@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { getSources } from '../../api';
 import './Controls.css';
 
@@ -14,38 +14,62 @@ const Controls = ({
   apiKey,
   setApiKey,
   onFetch,
+  fireData,
+  onExport,
+  onToggleCharts,
+  showCharts,
+  onToggleAlerts,
+  showAlerts,
+  onToggleWind,
+  showWind,
 }) => {
   const [sources, setSources] = useState([]);
   const [loadingSources, setLoadingSources] = useState(false);
 
-  useEffect(() => {
-    const loadSources = async () => {
-      setLoadingSources(true);
-      try {
-        const srcList = await getSources();
-        setSources(srcList);
-        if (srcList.length > 0 && !selectedSource) {
-          onSourceChange(srcList[0]);
-        }
-      } catch (error) {
-        console.error('Erreur lors du chargement des sources:', error);
-      } finally {
-        setLoadingSources(false);
+  const loadSources = useCallback(async () => {
+    setLoadingSources(true);
+    try {
+      const srcList = await getSources();
+      setSources(srcList);
+      if (srcList.length > 0 && !selectedSource) {
+        onSourceChange(srcList[0]);
       }
-    };
+    } catch (error) {
+      console.error('Erreur lors du chargement des sources:', error);
+    } finally {
+      setLoadingSources(false);
+    }
+  }, [selectedSource, onSourceChange]);
+
+  useEffect(() => {
     loadSources();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [loadSources]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
     onFetch();
   };
 
+  const hasData = fireData && fireData.features && fireData.features.length > 0;
+
   return (
     <form onSubmit={handleSubmit} className="controls">
+      <div className="controls-header">
+        <div className="controls-title">
+          <span className="fire-icon">🔥</span>
+          FireMaps
+        </div>
+        <div className="controls-status">
+          <span className="dot"></span>
+          En ligne
+        </div>
+      </div>
+
       <div className="control-group">
-        <label htmlFor="source-select">Source de données</label>
+        <label htmlFor="source-select">
+          <span className="label-icon">📡</span>
+          Source de données
+        </label>
         <select
           id="source-select"
           value={selectedSource}
@@ -61,7 +85,7 @@ const Controls = ({
       </div>
 
       <div className="control-group">
-        <label>Période</label>
+        <label>📅 Période</label>
         <div className="date-group">
           <input
             type="date"
@@ -90,7 +114,10 @@ const Controls = ({
       </div>
 
       <div className="control-group">
-        <label htmlFor="api-key">Clé API (optionnelle)</label>
+        <label htmlFor="api-key">
+          <span className="label-icon">🔑</span>
+          Clé API (optionnelle)
+        </label>
         <input
           id="api-key"
           type="text"
@@ -101,8 +128,51 @@ const Controls = ({
       </div>
 
       <button type="submit" disabled={loadingSources}>
-        Charger les feux
+        🔥 Charger les feux
       </button>
+
+      <div className="export-controls">
+        <button 
+          type="button" 
+          onClick={() => onExport('geojson')}
+          className="export-btn geojson"
+          disabled={!hasData}
+        >
+          📥 GeoJSON
+        </button>
+        <button 
+          type="button" 
+          onClick={() => onExport('csv')}
+          className="export-btn csv"
+          disabled={!hasData}
+        >
+          📥 CSV
+        </button>
+      </div>
+
+      <div className="feature-toggles">
+        <button 
+          type="button"
+          onClick={onToggleCharts}
+          className={`toggle-btn ${showCharts ? 'active' : ''}`}
+        >
+          📊 Graphiques
+        </button>
+        <button 
+          type="button"
+          onClick={onToggleAlerts}
+          className={`toggle-btn ${showAlerts ? 'active' : ''}`}
+        >
+          🚨 Alertes
+        </button>
+        <button 
+          type="button"
+          onClick={onToggleWind}
+          className={`toggle-btn ${showWind ? 'active' : ''}`}
+        >
+          🌬️ Vent
+        </button>
+      </div>
     </form>
   );
 };
