@@ -1,171 +1,113 @@
-.map-container {
+.map-wrapper {
+  position: relative;
   width: 100%;
   height: 100%;
-  min-height: 400px;
-  position: relative;
-  background: #e5eef5;
-  transition: background 0.3s;
-}
-
-.dark .map-container {
   background: #1a1a2e;
 }
 
-/* ============================================================
-   POPUPS MAPLIBRE
-   ============================================================ */
-.maplibregl-popup-content {
-  border-radius: 8px;
-  padding: 12px 14px;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  font-size: 0.85rem;
-  line-height: 1.6;
-  min-width: 200px;
-  max-width: 300px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
-}
-
-.maplibregl-popup-content strong {
-  color: #e67e22;
-  font-size: 0.95rem;
-}
-
-.maplibregl-popup-content b {
-  color: #2c3e50;
-}
-
-.maplibregl-popup-content hr {
-  margin: 6px 0;
-  border: none;
-  border-top: 1px solid #eee;
-}
-
-.dark .maplibregl-popup-content {
-  background: #2a3a5a;
-  color: #eaeaea;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
-}
-
-.dark .maplibregl-popup-content strong {
-  color: #f39c12;
-}
-
-.dark .maplibregl-popup-content b {
-  color: #ecf0f1;
-}
-
-.dark .maplibregl-popup-content hr {
-  border-top-color: #3a4a6a;
-}
-
-/* ============================================================
-   CONTROLES MAPLIBRE
-   ============================================================ */
-.dark .maplibregl-ctrl-group {
-  background: #2a3a5a;
-}
-
-.dark .maplibregl-ctrl-group button {
-  color: #eaeaea;
-}
-
-.dark .maplibregl-ctrl-group button:hover {
-  background: #3a4a6a;
-}
-
-.dark .maplibregl-ctrl-attrib {
-  background: rgba(26, 26, 46, 0.8);
-  color: #adb5bd;
-}
-
-.dark .maplibregl-ctrl-attrib a {
-  color: #f39c12;
-}
-
-/* ============================================================
-   HEATMAP LÉGENDE (optionnelle)
-   ============================================================ */
-.heatmap-legend {
+.map-container {
   position: absolute;
-  bottom: 30px;
-  right: 10px;
-  background: rgba(255, 255, 255, 0.9);
-  padding: 8px 12px;
-  border-radius: 4px;
-  font-size: 11px;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.2);
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.map-loading {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  color: #ffffff;
+  font-size: 16px;
   z-index: 10;
-  pointer-events: none;
 }
 
-.dark .heatmap-legend {
-  background: rgba(26, 26, 46, 0.9);
-  color: #eaeaea;
+.map-loading .spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid rgba(255, 255, 255, 0.2);
+  border-top: 4px solid #e74c3c;
+  border-radius: 50%;
+  animation: mapSpin 1s linear infinite;
 }
 
-.heatmap-legend-item {
+@keyframes mapSpin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.map-sdis-legend {
+  position: absolute;
+  bottom: 20px;
+  left: 20px;
+  z-index: 10;
+  background: rgba(26, 26, 46, 0.92);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  padding: 14px 18px;
+  border-radius: 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+  min-width: 150px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.map-sdis-legend-header {
+  font-weight: 700;
+  font-size: 13px;
+  color: #ffffff;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin: 2px 0;
+  gap: 8px;
 }
 
-.heatmap-legend-color {
-  width: 20px;
-  height: 4px;
-  border-radius: 2px;
+.map-sdis-legend-header .sdis-icon {
+  font-size: 16px;
 }
 
-/* ============================================================
-   RESPONSIVE
-   ============================================================ */
-@media (max-width: 768px) {
-  .map-container {
-    min-height: 300px;
-  }
-  
-  .maplibregl-popup-content {
-    font-size: 0.75rem;
-    padding: 8px 10px;
-    min-width: 160px;
-    max-width: 240px;
-  }
-  
-  .heatmap-legend {
-    font-size: 9px;
-    padding: 4px 8px;
-  }
+.map-sdis-legend-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
-@media (max-width: 480px) {
-  .map-container {
-    min-height: 250px;
-  }
-  
-  .maplibregl-popup-content {
-    font-size: 0.7rem;
-    padding: 6px 8px;
-    min-width: 140px;
-    max-width: 200px;
-  }
+.map-sdis-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  padding: 2px 4px;
+  border-radius: 4px;
 }
 
-/* ============================================================
-   IMPRESSION
-   ============================================================ */
-@media print {
-  .map-container {
-    min-height: 500px;
-    border: 1px solid #ddd;
-  }
-  
-  .maplibregl-ctrl-group,
-  .maplibregl-ctrl-attrib {
-    display: none !important;
-  }
-  
-  .heatmap-legend {
-    display: none !important;
-  }
+.map-sdis-legend-item:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.map-sdis-legend-color {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  flex-shrink: 0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.map-sdis-legend-department {
+  font-weight: 500;
+}
+
+.map-sdis-legend-code {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.3);
+  margin-left: auto;
 }
