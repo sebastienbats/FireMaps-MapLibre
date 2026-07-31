@@ -247,9 +247,9 @@ export const SDIS_COLORS = {
   'votre-departement': '#votre_couleur',
   default: '#e67e22'
 };
+```
 ### Modifier les couleurs du thème
 - Dans frontend/src/index.css, modifiez les variables CSS :
-
 ```css
 :root {
   --primary: #e74c3c;     /* Rouge principal */
