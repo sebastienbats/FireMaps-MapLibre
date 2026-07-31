@@ -70,17 +70,36 @@ exports.getFires = async (req, res) => {
     const response = await fetch(url, { signal: controller.signal });
     clearTimeout(timeout);
 
+    console.log(`📡 Réponse FIRMS : status ${response.status} ${response.statusText}`);
+
+    if (response.status === 404) {
+      console.log('ℹ️ Aucune donnée FIRMS pour cette période');
+      return res.status(200).json({
+        type: 'FeatureCollection',
+        features: [],
+        message: 'Aucun feu détecté pour cette période'
+      });
+    }
+
     if (!response.ok) {
       let errorMsg = `Erreur FIRMS (${response.status})`;
       if (response.status === 401) errorMsg = 'Clé API invalide ou manquante';
-      else if (response.status === 404) errorMsg = 'Aucune donnée pour cette période';
       else if (response.status === 429) errorMsg = 'Trop de requêtes, veuillez patienter';
+      else if (response.status === 500) errorMsg = 'Erreur interne du serveur FIRMS';
+      console.log(`❌ ${errorMsg}`);
       return res.status(response.status).json({ error: errorMsg });
     }
 
     const csvText = await response.text();
+    console.log(`📄 CSV reçu (${csvText.length} caractères)`);
+
     if (!csvText || csvText.trim().length === 0) {
-      return res.status(404).json({ error: 'Données vides' });
+      console.log('ℹ️ CSV vide');
+      return res.status(200).json({
+        type: 'FeatureCollection',
+        features: [],
+        message: 'Aucune donnée disponible'
+      });
     }
 
     let records;
@@ -93,12 +112,17 @@ exports.getFires = async (req, res) => {
         relax_column_count: true
       });
     } catch (parseError) {
-      console.error('Erreur de parsing CSV:', parseError);
+      console.error('❌ Erreur de parsing CSV:', parseError);
       return res.status(500).json({ error: 'Erreur lors du parsing des données' });
     }
 
     if (records.length === 0) {
-      return res.status(404).json({ error: 'Aucun feu trouvé' });
+      console.log('ℹ️ Aucun enregistrement valide');
+      return res.status(200).json({
+        type: 'FeatureCollection',
+        features: [],
+        message: 'Aucun feu valide trouvé'
+      });
     }
 
     const features = records.map(row => {
@@ -135,7 +159,7 @@ exports.getFires = async (req, res) => {
   } catch (error) {
     console.error('❌ Erreur dans getFires:', error);
     if (error.name === 'AbortError') {
-      res.status(504).json({ error: 'Délai d’attente dépassé' });
+      res.status(504).json({ error: 'Délai d\'attente dépassé' });
     } else {
       res.status(500).json({ error: 'Erreur serveur : ' + error.message });
     }
