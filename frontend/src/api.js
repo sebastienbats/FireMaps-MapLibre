@@ -1,6 +1,6 @@
 import axios from 'axios';
+import { parseApiError } from './utils/errorHandler';
 
-// Utilise le proxy défini dans package.json
 const API_BASE_URL = process.env.REACT_APP_API_URL || '/api';
 
 const api = axios.create({
@@ -11,26 +11,35 @@ const api = axios.create({
   },
 });
 
-// Intercepteur pour logger les requêtes
 api.interceptors.request.use(
   (config) => {
-    console.log(`📡 Requête : ${config.method.toUpperCase()} ${config.baseURL}${config.url}`, config.params || config.data);
+    console.log(`📡 Requête : ${config.method.toUpperCase()} ${config.baseURL}${config.url}`);
     return config;
   },
-  (error) => Promise.reject(error)
+  (error) => {
+    console.error('❌ Erreur de requête:', error);
+    return Promise.reject(error);
+  }
 );
 
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response) {
-      console.error('❌ Erreur API:', error.response.status, error.response.data);
-    } else if (error.request) {
-      console.error('❌ Pas de réponse du serveur:', error.request);
-    } else {
-      console.error('❌ Erreur de configuration:', error.message);
-    }
-    return Promise.reject(error);
+    const parsedError = parseApiError(error);
+    console.error('❌ Erreur API:', {
+      status: parsedError.status,
+      type: parsedError.type,
+      message: parsedError.message,
+      details: parsedError.details,
+    });
+    
+    const structuredError = new Error(parsedError.message);
+    structuredError.type = parsedError.type;
+    structuredError.details = parsedError.details;
+    structuredError.status = parsedError.status;
+    structuredError.originalError = error;
+    
+    return Promise.reject(structuredError);
   }
 );
 
@@ -39,8 +48,8 @@ export const getSources = async () => {
     const response = await api.get('/fires/sources');
     return response.data.sources;
   } catch (error) {
-    console.error('Erreur getSources:', error);
-    throw new Error('Impossible de récupérer les sources');
+    const parsed = parseApiError(error);
+    throw new Error(parsed.message);
   }
 };
 
@@ -55,12 +64,10 @@ export const getFires = async ({ source, days, startDate, endDate, apiKey }) => 
     }
     if (apiKey) params.apiKey = apiKey;
 
-    console.log('📡 Envoi de la requête avec params:', params);
     const response = await api.get('/fires', { params });
     return response.data;
   } catch (error) {
-    console.error('Erreur getFires:', error);
-    throw new Error('Erreur lors de la récupération des feux');
+    throw error;
   }
 };
 
