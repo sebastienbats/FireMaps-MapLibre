@@ -1,32 +1,22 @@
 <!DOCTYPE html>
 <html lang="fr">
-<head>
-  <meta charset="utf-8" />
-  <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="theme-color" content="#e67e22" />
-  <meta name="description" content="Visualisation des feux, vents, météo et SDIS en France" />
-  <title>🔥 Feux & Vents & Météo & SDIS</title>
-  
-  <!-- Font Awesome -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css" />
-  
-  <!-- MapLibre GL CSS -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.0/dist/maplibre-gl.css" />
-</head>
-<body>
-  <noscript>
-    <div style="text-align:center; padding:40px; font-family:Arial, sans-serif;">
-      <h2>⚠️ JavaScript est désactivé</h2>
-      <p>Cette application nécessite JavaScript pour fonctionner.<br />Veuillez l'activer.</p>
-    </div>
-  </noscript>
-  <div id="root"></div>
-
-  <!-- MapLibre GL JS -->
-  <script src="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.0/dist/maplibre-gl.js"></script>
-  
-  <!-- Open-Meteo Weather Map Layer via UNPKG -->
-  <script src="https://unpkg.com/@openmeteo/weather-map-layer@0.0.20/dist/index.js"></script>
-</body>
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#1a1a2e" />
+    <meta name="description" content="FireMaps - Surveillance des incendies en France" />
+    <title>FireMaps - Surveillance des incendies</title>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+    
+    <link href="https://unpkg.com/maplibre-gl@4.7.0/dist/maplibre-gl.css" rel="stylesheet" />
+    <script src="https://unpkg.com/maplibre-gl@4.7.0/dist/maplibre-gl.js"></script>
+    
+    <script src="https://unpkg.com/@openmeteo/weather-map-layer@0.0.20/dist/index.js"></script>
+  </head>
+  <body>
+    <noscript>Vous devez activer JavaScript pour utiliser FireMaps.</noscript>
+    <div id="root"></div>
+  </body>
 </html>
