@@ -5,10 +5,8 @@ const { getFires, getSources } = require('../controllers/fireController');
 
 console.log('📂 Chargement du routeur fires.js');
 
-// Route pour lister les sources disponibles
 router.get('/sources', getSources);
 
-// Route principale avec validation des paramètres
 router.get(
   '/',
   [
