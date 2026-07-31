@@ -1,8 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
-import maplibregl from 'maplibre-gl';
-import 'maplibre-gl/dist/maplibre-gl.css';
+import React, { useState, useEffect } from 'react';
+import toast, { Toaster } from 'react-hot-toast';
 import { getFires } from './api';
 import Controls from './components/Controls';
+import Map from './components/Map';
+import FireChart from './components/Charts/FireChart';
+import Alerts from './components/Alerts/Alerts';
+import { SDIS_DATA } from './data/sdisData';
+import { formatErrorForUser } from './utils/errorHandler';
 import './App.css';
 
 function App() {
@@ -15,13 +19,22 @@ function App() {
   const [fireData, setFireData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [infoMessage, setInfoMessage] = useState(null);
 
-  const mapContainer = useRef(null);
-  const map = useRef(null);
+  const [showCharts, setShowCharts] = useState(false);
+  const [showAlerts, setShowAlerts] = useState(true);
+  const [showWeather, setShowWeather] = useState(true);
+  const [activeWeatherLayers, setActiveWeatherLayers] = useState(['temperature_2m']);
+  const [weatherOpacity, setWeatherOpacity] = useState(0.6);
+  const [showSdis, setShowSdis] = useState(true);
+  const [showWind, setShowWind] = useState(false);
+
+  const [sdisData] = useState(SDIS_DATA);
 
   const fetchFires = async () => {
     setLoading(true);
     setError(null);
+    setInfoMessage(null);
     try {
       const params = { source };
       if (startDate && endDate) {
@@ -32,108 +45,159 @@ function App() {
       }
       if (apiKey) params.apiKey = apiKey;
 
-      console.log('📡 fetchFires appelé avec params:', params);
       const data = await getFires(params);
       setFireData(data);
+
+      if (data.message) {
+        setInfoMessage(data.message);
+        toast.info(data.message, { duration: 4000 });
+      } else if (data.features && data.features.length === 0) {
+        setInfoMessage('Aucun feu détecté pour cette période et cette source.');
+        toast.warning('Aucun feu détecté', { duration: 4000 });
+      } else {
+        toast.success(`✅ ${data.features.length} feux chargés`, { duration: 3000 });
+      }
     } catch (err) {
-      setError(err.message || 'Erreur lors de la récupération des feux');
+      const userError = formatErrorForUser(err);
+      setError(`❌ ${userError.message}`);
+      const toastFn = userError.severity === 'high' ? toast.error : toast.warning;
+      toastFn(userError.message, { 
+        duration: userError.severity === 'high' ? 8000 : 5000 
+      });
       console.error('Erreur fetchFires:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  // Vérifier que le backend est accessible
+  useEffect(() => {
+    const checkMaplibre = () => {
+      if (typeof window !== 'undefined') {
+        if (window.maplibregl) console.log('✅ MapLibre GL chargé');
+        if (window.OMWeatherMapLayer) console.log('✅ OMWeatherMapLayer chargé');
+      }
+    };
+    checkMaplibre();
+    setTimeout(checkMaplibre, 2000);
+  }, []);
+
   useEffect(() => {
     const checkBackend = async () => {
       try {
         const response = await fetch('/api/health');
         if (!response.ok) {
-          console.warn('⚠️ Backend non disponible (code:', response.status, ')');
+          console.warn('⚠️ Backend non disponible');
         } else {
-          const data = await response.json();
-          console.log('✅ Backend accessible:', data);
+          console.log('✅ Backend accessible');
         }
       } catch (e) {
-        console.warn('⚠️ Backend injoignable – assurez-vous que le serveur tourne sur le port 5000');
-        console.warn('   Pour démarrer le backend : cd backend && npm start');
+        console.warn('⚠️ Backend injoignable');
       }
     };
     checkBackend();
   }, []);
 
-  // Initialisation de la carte
-  useEffect(() => {
-    if (!map.current) {
-      map.current = new maplibregl.Map({
-        container: mapContainer.current,
-        style: 'https://demotiles.maplibre.org/style.json',
-        center: [2.0, 46.0],
-        zoom: 5,
-      });
-      map.current.addControl(new maplibregl.NavigationControl(), 'top-right');
-    }
-
-    return () => {
-      if (map.current) {
-        map.current.remove();
-        map.current = null;
-      }
-    };
-  }, []);
-
-  // Ajout des données sur la carte
-  useEffect(() => {
-    if (!map.current || !fireData) return;
-
-    if (map.current.getSource('fires')) {
-      map.current.removeLayer('fires-layer');
-      map.current.removeSource('fires');
-    }
-
-    map.current.addSource('fires', {
-      type: 'geojson',
-      data: fireData,
-    });
-
-    map.current.addLayer({
-      id: 'fires-layer',
-      type: 'circle',
-      source: 'fires',
-      paint: {
-        'circle-radius': 6,
-        'circle-color': [
-          'case',
-          ['==', ['get', 'confidence'], 'high'],
-          '#ff0000',
-          ['==', ['get', 'confidence'], 'medium'],
-          '#ff8800',
-          '#ffcc00',
-        ],
-        'circle-opacity': 0.8,
-        'circle-stroke-width': 1,
-        'circle-stroke-color': '#ffffff',
-      },
-    });
-
-    const bounds = new maplibregl.LngLatBounds();
-    fireData.features.forEach(feature => {
-      const coords = feature.geometry.coordinates;
-      bounds.extend([coords[0], coords[1]]);
-    });
-    if (!bounds.isEmpty()) {
-      map.current.fitBounds(bounds, { padding: 50 });
-    }
-  }, [fireData]);
-
-  // Appel initial et lors des changements de paramètres
   useEffect(() => {
     fetchFires();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [source, days, startDate, endDate]);
 
+  const handleWeatherToggle = (layers, opacity) => {
+    if (layers !== undefined) setActiveWeatherLayers(layers);
+    if (opacity !== undefined) setWeatherOpacity(opacity);
+  };
+
+  const handleExport = async (format) => {
+    if (!fireData || !fireData.features || fireData.features.length === 0) {
+      toast.error('Aucune donnée à exporter');
+      return;
+    }
+
+    try {
+      let data, filename, contentType;
+
+      if (format === 'geojson') {
+        data = JSON.stringify(fireData, null, 2);
+        filename = `fire-data-${new Date().toISOString().slice(0,10)}.geojson`;
+        contentType = 'application/json';
+        toast.loading('Préparation de l\'export GeoJSON...', { id: 'export' });
+      } else {
+        const headers = ['latitude', 'longitude', 'frp', 'confidence', 'acq_date', 'acq_time', 'satellite', 'instrument'];
+        const rows = fireData.features.map(f => ({
+          latitude: f.geometry.coordinates[1],
+          longitude: f.geometry.coordinates[0],
+          frp: f.properties.frp,
+          confidence: f.properties.confidence,
+          acq_date: f.properties.acq_date,
+          acq_time: f.properties.acq_time,
+          satellite: f.properties.satellite || '',
+          instrument: f.properties.instrument || '',
+        }));
+        
+        let csv = headers.join(',') + '\n';
+        rows.forEach(row => {
+          csv += headers.map(h => row[h]).join(',') + '\n';
+        });
+        
+        data = csv;
+        filename = `fire-data-${new Date().toISOString().slice(0,10)}.csv`;
+        contentType = 'text/csv';
+        toast.loading('Préparation de l\'export CSV...', { id: 'export' });
+      }
+
+      const blob = new Blob([data], { type: contentType });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      toast.success(`✅ Export ${format.toUpperCase()} réussi ! (${fireData.features.length} feux)`, { 
+        id: 'export',
+        duration: 4000,
+      });
+    } catch (error) {
+      console.error('Erreur export:', error);
+      toast.error('❌ Erreur lors de l\'export', { id: 'export' });
+    }
+  };
+
+  const toggleCharts = () => {
+    setShowCharts(!showCharts);
+    toast.success(`📊 Graphiques ${!showCharts ? 'affichés' : 'masqués'}`, { duration: 2000 });
+  };
+
+  const toggleAlerts = () => {
+    setShowAlerts(!showAlerts);
+    toast.success(`🚨 Alertes ${!showAlerts ? 'activées' : 'désactivées'}`, { duration: 2000 });
+  };
+
+  const toggleWind = () => {
+    setShowWind(!showWind);
+    toast.success(`🌬️ Vent ${!showWind ? 'activé' : 'désactivé'}`, { duration: 2000 });
+  };
+
   return (
     <div className="App">
+      <Toaster 
+        position="top-right"
+        toastOptions={{
+          duration: 4000,
+          style: {
+            background: '#1a1a2e',
+            color: '#fff',
+            border: '1px solid rgba(255,255,255,0.06)',
+            borderRadius: '12px',
+            backdropFilter: 'blur(20px)',
+          },
+          success: { duration: 3000, icon: '✅' },
+          error: { duration: 5000, icon: '❌' },
+        }}
+      />
+      
       <Controls
         selectedSource={source}
         onSourceChange={setSource}
@@ -146,10 +210,68 @@ function App() {
         apiKey={apiKey}
         setApiKey={setApiKey}
         onFetch={fetchFires}
+        fireData={fireData}
+        onExport={handleExport}
+        onToggleCharts={toggleCharts}
+        showCharts={showCharts}
+        onToggleAlerts={toggleAlerts}
+        showAlerts={showAlerts}
+        onToggleWind={toggleWind}
+        showWind={showWind}
       />
-      {loading && <div className="loading-overlay">Chargement des feux...</div>}
-      {error && <div className="error-message">❌ Erreur : {error}</div>}
-      <div ref={mapContainer} className="map-container" />
+      
+      {loading && (
+        <div className="loading-overlay">
+          <div className="loader-text">
+            <div className="spinner"></div>
+            <span>Chargement des feux...</span>
+          </div>
+          <div className="loader-progress">
+            <div className="bar"></div>
+          </div>
+        </div>
+      )}
+      {infoMessage && (
+        <div className="info-message fade-in">
+          <span className="message-icon">ℹ️</span>
+          {infoMessage}
+        </div>
+      )}
+      {error && (
+        <div className="error-message fade-in">
+          <span className="error-icon">❌</span>
+          {error}
+        </div>
+      )}
+      
+      <Map
+        fireData={fireData}
+        showHeatmap={true}
+        darkMode={false}
+        showWeather={showWeather}
+        activeWeatherLayers={activeWeatherLayers}
+        weatherOpacity={weatherOpacity}
+        onWeatherToggle={handleWeatherToggle}
+        showSdis={showSdis}
+        showWind={showWind}
+        sdisData={sdisData}
+      />
+
+      {showAlerts && (
+        <Alerts 
+          fireData={fireData} 
+          sdisData={sdisData}
+          threshold={5}
+        />
+      )}
+
+      {showCharts && (
+        <FireChart 
+          fireData={fireData} 
+          source={source}
+          period={days}
+        />
+      )}
     </div>
   );
 }
