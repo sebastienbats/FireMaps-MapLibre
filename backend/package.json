@@ -1,7 +1,7 @@
 {
   "name": "firemaps-backend",
   "version": "1.0.0",
-  "description": "Backend pour FireMaps",
+  "description": "Backend pour FireMaps - API de données d'incendies",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
