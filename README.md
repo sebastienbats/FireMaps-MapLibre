@@ -11,12 +11,6 @@
 
 ---
 
-## 📸 Aperçu
-
-![FireMaps Dashboard](https://via.placeholder.com/1200x600/1a1a2e/e74c3c?text=FireMaps+Screenshot)
-
----
-
 ## ✨ Fonctionnalités
 
 ### 🗺️ Carte interactive
