@@ -112,63 +112,6 @@
     #Le frontend sera accessible sur http://localhost:3000 et le backend sur http://localhost:5000.
     ```
 ## 📁 Structure complète du projet
-    ```text
-    FireMaps-MapLibre/
-    ├── backend/
-    │   ├── package.json
-    │   ├── server.js
-    │   ├── .env
-    │   ├── routes/
-    │   │   ├── fires.js
-    │   │   └── exports.js
-    │   ├── controllers/
-    │   │   ├── fireController.js
-    │   │   └── exportController.js
-    │   └── exports/
-    │       └── (dossier vide)
-    ├── frontend/
-    │   ├── package.json
-    │   ├── .env
-    │   ├── public/
-    │   │   └── index.html
-    │   └── src/
-    │       ├── index.js
-    │       ├── index.css
-    │       ├── App.js
-    │       ├── App.css
-    │       ├── api.js
-    │       ├── lib/
-    │       │   ├── maplibre.js
-    │       │   └── index.js
-    │       ├── utils/
-    │       │   └── errorHandler.js
-    │       ├── data/
-    │       │   ├── sdisData.js
-    │       │   └── index.js
-    │       └── components/
-    │           ├── Controls/
-    │           │   ├── Controls.js
-    │           │   ├── Controls.css
-    │           │   └── index.js
-    │           ├── Map/
-    │           │   ├── Map.js
-    │           │   ├── Map.css
-    │           │   ├── WindLayer.js
-    │           │   ├── WindControls.js
-    │           │   ├── WindControls.css
-    │           │   ├── WindLayerAdapter.js
-    │           │   └── index.js
-    │           ├── Charts/
-    │           │   ├── FireChart.js
-    │           │   ├── FireChart.css
-    │           │   └── index.js
-    │           └── Alerts/
-    │               ├── Alerts.js
-    │               ├── Alerts.css
-    │               └── index.js
-    └── README.md
-    ```
-## 🏗️ Architecture
 ```text
 FireMaps-MapLibre/
 ├── backend/
